@@ -1,0 +1,1 @@
+{"version":3,"file":"lyric.d.ts","sourceRoot":"","sources":["../../src/endpoints/lyric.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,WAAW,EAAE,MAAM,UAAU,CAAC;AAE5C,OAAO,KAAK,EAAE,GAAG,EAAE,MAAM,cAAc,CAAC;AAgBxC,sBAAsB;AACtB,wBAAsB,UAAU,CAAC,GAAG,EAAE,GAAG,EAAE,OAAO,EAAE,MAAM,EAAE,MAAM,CAAC,EAAE,WAAW,GAAG,OAAO,CAAC,WAAW,CAAC,CAyBtG"}

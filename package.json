@@ -1,0 +1,20 @@
+{
+  "name": "music-fetcher",
+  "version": "0.1.0",
+  "private": true,
+  "license": "GPL-3.0-or-later",
+  "author": "weihaoyang <83804233+weihaoyang@users.noreply.github.com>",
+  "description": "本地补歌服务原型：搜索 QQ 音乐 -> 触发下载 -> TuneFree 解密 -> 规范化入库",
+  "type": "commonjs",
+  "bin": {
+    "music-fetcher": "bin/cli.js"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "selftest": "node scripts/selftest.js",
+    "mock:create": "node scripts/make-mock-mflac.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

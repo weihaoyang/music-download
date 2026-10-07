@@ -1,0 +1,25 @@
+{
+  "name": "@hdbc/dance-backend",
+  "version": "0.1.0",
+  "private": true,
+  "license": "GPL-3.0-or-later",
+  "author": "weihaoyang <83804233+weihaoyang@users.noreply.github.com>",
+  "description": "排曲网站数据后端：默认曲库 + 搜索/播放 + 多用户扫码登录 + 外部歌单导入",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "dev": "tsc -p tsconfig.json && node dist/index.js",
+    "build-library": "node scripts/build-library.js"
+  },
+  "dependencies": {
+    "@hdbc/qqmusic-sdk": "file:../qqmusic-sdk"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "typescript": "^7.0.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

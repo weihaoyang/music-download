@@ -1,0 +1,52 @@
+body {
+  margin: 0;
+  background: var(--semi-color-bg-0, #f7f8fa);
+  font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+.app {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 20px 16px 140px 16px;
+}
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.muted {
+  color: var(--semi-color-text-2, #6b7280);
+  font-size: 12px;
+}
+.player {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--semi-color-bg-1, #fff);
+  border-top: 1px solid var(--semi-color-border, #e5e6eb);
+  padding: 10px 16px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 20;
+}
+.player-title {
+  font-size: 13px;
+  color: var(--semi-color-text-1, #1c1f23);
+}
+.player audio {
+  width: 100%;
+}

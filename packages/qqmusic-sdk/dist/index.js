@@ -1,0 +1,27 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.resolveConfig = exports.maskKey = exports.parseCookie = exports.parseSetCookie = exports.getGtk = exports.hash33 = exports.QrLogin = exports.TokenManager = exports.HttpCookieProvider = exports.MemoryTokenStore = exports.FileTokenStore = exports.normalizeUpstreamError = exports.isAuthError = exports.isQQMusicError = exports.QQMusicError = exports.createQQMusicClient = void 0;
+var client_1 = require("./client");
+Object.defineProperty(exports, "createQQMusicClient", { enumerable: true, get: function () { return client_1.createQQMusicClient; } });
+var errors_1 = require("./errors");
+Object.defineProperty(exports, "QQMusicError", { enumerable: true, get: function () { return errors_1.QQMusicError; } });
+Object.defineProperty(exports, "isQQMusicError", { enumerable: true, get: function () { return errors_1.isQQMusicError; } });
+Object.defineProperty(exports, "isAuthError", { enumerable: true, get: function () { return errors_1.isAuthError; } });
+Object.defineProperty(exports, "normalizeUpstreamError", { enumerable: true, get: function () { return errors_1.normalizeUpstreamError; } });
+var stores_1 = require("./auth/stores");
+Object.defineProperty(exports, "FileTokenStore", { enumerable: true, get: function () { return stores_1.FileTokenStore; } });
+Object.defineProperty(exports, "MemoryTokenStore", { enumerable: true, get: function () { return stores_1.MemoryTokenStore; } });
+var providers_1 = require("./auth/providers");
+Object.defineProperty(exports, "HttpCookieProvider", { enumerable: true, get: function () { return providers_1.HttpCookieProvider; } });
+var token_manager_1 = require("./auth/token-manager");
+Object.defineProperty(exports, "TokenManager", { enumerable: true, get: function () { return token_manager_1.TokenManager; } });
+var qr_login_1 = require("./auth/qr-login");
+Object.defineProperty(exports, "QrLogin", { enumerable: true, get: function () { return qr_login_1.QrLogin; } });
+Object.defineProperty(exports, "hash33", { enumerable: true, get: function () { return qr_login_1.hash33; } });
+Object.defineProperty(exports, "getGtk", { enumerable: true, get: function () { return qr_login_1.getGtk; } });
+Object.defineProperty(exports, "parseSetCookie", { enumerable: true, get: function () { return qr_login_1.parseSetCookie; } });
+var config_1 = require("./config");
+Object.defineProperty(exports, "parseCookie", { enumerable: true, get: function () { return config_1.parseCookie; } });
+Object.defineProperty(exports, "maskKey", { enumerable: true, get: function () { return config_1.maskKey; } });
+Object.defineProperty(exports, "resolveConfig", { enumerable: true, get: function () { return config_1.resolveConfig; } });
+//# sourceMappingURL=index.js.map

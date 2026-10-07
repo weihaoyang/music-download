@@ -1,0 +1,7 @@
+node_modules/
+.work/
+.selftest/
+config.json
+*.log
+.qq-cookie.txt
+.qq-cookie.json

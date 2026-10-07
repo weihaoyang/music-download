@@ -1,0 +1,31 @@
+{
+  "name": "@hdbc/dance-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "license": "GPL-3.0-or-later",
+  "author": "weihaoyang <83804233+weihaoyang@users.noreply.github.com>",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@douyinfe/semi-ui": "^2.66.0",
+    "@types/animejs": "^3.1.13",
+    "@types/howler": "^2.2.13",
+    "animejs": "^3.2.2",
+    "aplayer": "^1.10.1",
+    "howler": "^2.2.4",
+    "html2canvas": "^1.4.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.0"
+  }
+}

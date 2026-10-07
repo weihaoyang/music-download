@@ -1,0 +1,34 @@
+{
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8787,
+    "token": ""
+  },
+  "paths": {
+    "downloadDir": "./.work/download",
+    "libraryDir": "./.work/library",
+    "workDir": "./.work",
+    "tuneFreeExe": "",
+    "musicApiBase": "http://127.0.0.1:3300",
+    "ffmpeg": ""
+  },
+  "converter": {
+    "bitrate": "320k",
+    "keepSource": false,
+    "mock": true,
+    "extraArgs": []
+  },
+  "watcher": {
+    "enabled": true,
+    "pollIntervalMs": 3000,
+    "stableRounds": 2,
+    "extensions": [".mflac", ".mgg", ".mflac0", ".mflac1", ".mgg0", ".mgg1"]
+  },
+  "engine": {
+    "default": "web",
+    "playlistDirId": 0
+  },
+  "import": {
+    "naming": "keep"
+  }
+}

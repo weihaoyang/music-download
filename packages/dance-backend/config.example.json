@@ -1,0 +1,11 @@
+{
+  "host": "127.0.0.1",
+  "port": 8790,
+  "dataDir": "data",
+  "mediaDir": "data/media",
+  "bridgeUrl": "http://127.0.0.1:8899/cookie",
+  "adminToken": "change-me",
+  "mediaQuality": "320",
+  "autoDownload": true,
+  "downloadConcurrency": 3
+}

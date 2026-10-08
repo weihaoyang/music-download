@@ -166,7 +166,7 @@ export default function App() {
   } | null>(null);
 
   const [editOpen, setEditOpen] = useState(false);
-  const [editForm, setEditForm] = useState<{ mid: string; name: string; artists: string; type: string; bpm: number | null; meter: string | null; energy: number | null; mood: string | null; suitable: boolean | null }>({ mid: '', name: '', artists: '', type: '', bpm: null, meter: null, energy: null, mood: null, suitable: null });
+  const [editForm, setEditForm] = useState<{ mid: string; name: string; artists: string; type: string; bpm: number | null; meter: string | null; energy: number | null; mood: string | null; suitable: boolean | null; rights: 'external' | 'club'; edited: boolean }>({ mid: '', name: '', artists: '', type: '', bpm: null, meter: null, energy: null, mood: null, suitable: null, rights: 'external', edited: false });
 
   const [event, setEvent] = useState<{ name: string; time: string; location: string; host: string; note: string }>({ name: '', time: '', location: '', host: '', note: '' });
   const posterRef = useRef<HTMLDivElement | null>(null);
@@ -393,7 +393,7 @@ export default function App() {
       .finally(() => setCalibLoading(false));
   }
   function openEdit(s: LibrarySong) {
-    setEditForm({ mid: s.mid, name: s.name, artists: (s.artists || []).join(' / '), type: s.type, bpm: s.bpm ?? null, meter: s.meter ?? null, energy: s.energy ?? null, mood: s.mood ?? null, suitable: s.suitable ?? null });
+    setEditForm({ mid: s.mid, name: s.name, artists: (s.artists || []).join(' / '), type: s.type, bpm: s.bpm ?? null, meter: s.meter ?? null, energy: s.energy ?? null, mood: s.mood ?? null, suitable: s.suitable ?? null, rights: s.provenance?.rights ?? 'external', edited: s.provenance?.edited ?? false });
     setEditOpen(true);
   }
   function saveEdit() {
@@ -403,6 +403,8 @@ export default function App() {
       artists: editForm.artists.split(/[/、,，]/).map((x) => x.trim()).filter(Boolean),
       type: editForm.type,
       suitable: editForm.suitable,
+      rights: editForm.rights,
+      edited: editForm.edited,
       // 手动标记为适合时清掉旧的不适合提示
       ...(editForm.suitable === true ? { warning: null } : {}),
     })
@@ -703,6 +705,11 @@ export default function App() {
           {isLib && lib.source && lib.source !== 'qqmusic' ? (
             <span className="chip chip-src" title={'来源：' + (SOURCE_LABELS[lib.source] || lib.source)}>
               {SOURCE_LABELS[lib.source] || lib.source}
+            </span>
+          ) : null}
+          {isLib && lib.provenance?.rights === 'club' ? (
+            <span className="chip chip-club" title={lib.provenance.edited ? '社团自制（已编辑）' : '社团自制'}>
+              自制
             </span>
           ) : null}
           {isLib && lib.mood ? <span className={'chip ' + (lib.mood === '欢快' ? 'chip-lively' : lib.mood === '舒缓' ? 'chip-mellow' : 'chip-mid')}>{lib.mood}</span> : null}
@@ -1154,6 +1161,20 @@ export default function App() {
             >
               <Radio value={1}>适合</Radio>
               <Radio value={0}>不适合（节奏不稳/散拍）</Radio>
+            </RadioGroup>
+          </div>
+          <div className="field">
+            <span>归属</span>
+            <RadioGroup value={editForm.rights} onChange={(e) => setEditForm((f) => ({ ...f, rights: e.target.value as 'external' | 'club' }))}>
+              <Radio value="external">外部引进</Radio>
+              <Radio value="club">社团自制</Radio>
+            </RadioGroup>
+          </div>
+          <div className="field">
+            <span>是否编辑过</span>
+            <RadioGroup value={editForm.edited ? 1 : 0} onChange={(e) => setEditForm((f) => ({ ...f, edited: Number(e.target.value) === 1 }))}>
+              <Radio value={0}>否</Radio>
+              <Radio value={1}>是（剪辑/编辑）</Radio>
             </RadioGroup>
           </div>
           {editForm.bpm ? (

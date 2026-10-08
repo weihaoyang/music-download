@@ -37,7 +37,7 @@ function arg(name, def) {
   const download = !process.argv.includes('--no-download');
   const onlyType = arg('type', '');
 
-  const lib = new LibraryStore(path.join(cfg.dataDir, 'library.json'));
+  const lib = new LibraryStore(path.join(cfg.dataDir, 'tracks.json'), path.join(cfg.dataDir, 'library.json'));
   await lib.load();
   const media = new MediaCache(cfg.mediaDir, cfg.mediaQuality, cfg.downloadConcurrency, cfg.logger);
   const client = await createQQMusicClient({ cookieProvider: new HttpCookieProvider(cfg.bridgeUrl), logger: cfg.logger });

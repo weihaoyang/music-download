@@ -29,6 +29,12 @@ async function findMid(mid, types) {
   const src = await j('/api/sources');
   const ids = (src.body.data || []).map((s) => s.id);
   ok('sources 5 项', ids.length === 5 && ['qqmusic', 'netease', 'local', 'http', 'pan'].every((x) => ids.includes(x)), ids);
+  const anyType = types.find((t) => t.count > 0);
+  if (anyType) {
+    const anyList = await j('/api/library/list?type=' + encodeURIComponent(anyType.type));
+    const anySong = (anyList.body.songs || [])[0];
+    ok('track 含 provenance/assets(schema v2)', !!(anySong && anySong.provenance && anySong.assets && anySong.primaryAssetId), anySong && anySong.provenance);
+  }
 
   console.log('== 2. 网易云搜索 ==');
   const nes = await j('/api/source/netease/search?type=song&keywords=' + encodeURIComponent('晴天') + '&limit=3');

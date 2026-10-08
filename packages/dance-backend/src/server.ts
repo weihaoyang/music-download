@@ -78,7 +78,7 @@ function streamFile(req: IncomingMessage, res: ServerResponse, absPath: string, 
 
 export function createServer(cfg: BackendConfig) {
   const sessions = new SessionStore(path.join(cfg.dataDir, 'sessions.json'));
-  const library = new LibraryStore(path.join(cfg.dataDir, 'library.json'));
+  const library = new LibraryStore(path.join(cfg.dataDir, 'tracks.json'), path.join(cfg.dataDir, 'library.json'));
   const setlists = new SetlistStore(path.join(cfg.dataDir, 'setlists.json'));
   const settings = new SettingsStore(path.join(cfg.dataDir, 'settings.json'));
   const tasks = new TaskStore();
@@ -569,6 +569,8 @@ export function createServer(cfg: BackendConfig) {
       if (typeof body.type === 'string' && body.type) patch.type = body.type;
       if (typeof body.suitable === 'boolean') patch.suitable = body.suitable;
       if (typeof body.warning === 'string' || body.warning === null) patch.warning = body.warning;
+      if (body.rights === 'external' || body.rights === 'club') patch.rights = body.rights;
+      if (typeof body.edited === 'boolean') patch.edited = body.edited;
       const song = await library.updateSong(mid, patch);
       if (!song) return sendJson(res, 404, { ok: false, error: 'song not found' });
       return sendJson(res, 200, { ok: true, data: song });

@@ -111,6 +111,8 @@ export interface LibrarySong {
   warning?: string | null;
   /** 来源：qqmusic / netease / local / http / pan */
   source?: string | null;
+  /** schema v2：归属与溯源 */
+  provenance?: { rights: 'external' | 'club'; edited: boolean; origin?: unknown; note?: string | null } | null;
 }
 
 export interface Song {

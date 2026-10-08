@@ -13,6 +13,7 @@ import { TaskStore } from './tasks';
 import { SetlistStore, generateSetlist, type EventMeta } from './setlist';
 import { SettingsStore } from './settings';
 import { analyze } from './classifier';
+import * as netease from './sources/netease';
 import { scanDanceDir, coreName, localMid } from './localscan';
 import { sendJson, readBody, parseCookies, setCookie, clearCookie } from './http';
 
@@ -89,6 +90,7 @@ export function createServer(cfg: BackendConfig) {
       downloadConcurrency: s.downloadConcurrency ?? cfg.downloadConcurrency,
       cacheLimitBytes: s.cacheLimitBytes ?? cfg.cacheLimitBytes,
       autoClassify: s.autoClassify ?? cfg.autoClassify,
+      neteaseCookie: s.neteaseCookie ?? cfg.neteaseCookie,
     };
   }
 
@@ -105,6 +107,7 @@ export function createServer(cfg: BackendConfig) {
   const ready = Promise.all([sessions.load(), library.load(), setlists.load(), settings.load()]).then(() => {
     const e = eff();
     media = new MediaCache(e.mediaDir, e.mediaQuality, e.downloadConcurrency, cfg.logger);
+    netease.setNeteaseCookie(e.neteaseCookie);
     try {
       fsSync.mkdirSync(e.mediaDir, { recursive: true });
     } catch {
@@ -167,9 +170,8 @@ export function createServer(cfg: BackendConfig) {
   async function queueDownloads(mids: string[], type: string | null): Promise<string> {
     const task = tasks.create(type, eff().autoDownload ? mids : []);
     if (!eff().autoDownload || !mids.length) return task.id;
-    const client = await pool.libraryClient();
     for (const mid of mids) {
-      media.enqueue(mid, client, {
+      media.enqueue(mid, () => assetFetcher(mid), {
         onStart: (m) => tasks.start(task.id, m),
         onDone: (m, file, size) => {
           tasks.settle(task.id, m, !!file);
@@ -178,6 +180,18 @@ export function createServer(cfg: BackendConfig) {
       });
     }
     return task.id;
+  }
+
+  /** 按来源取流并落盘：网易云走直链下载，其余（QQ）走 SDK */
+  async function assetFetcher(mid: string): Promise<string> {
+    const hit = library.findByMid(mid);
+    if (hit?.song.source === 'netease') {
+      const u = await netease.songUrl(hit.song.mid);
+      if (!u) throw new QQMusicError('QQ_UNSUPPORTED', '网易云该曲无直链（可能需登录 Cookie 或会员）');
+      return media.ensureFromUrl(u, mid);
+    }
+    const client = await pool.libraryClient();
+    return media.ensure(client, mid);
   }
 
   /** 缓存超限时按 LRU 淘汰（保留最近播放的），只删真正存在于缓存目录里的文件 */
@@ -342,9 +356,11 @@ export function createServer(cfg: BackendConfig) {
       if (body.downloadConcurrency !== undefined) patch.downloadConcurrency = Number(body.downloadConcurrency);
       if (body.cacheLimitBytes !== undefined) patch.cacheLimitBytes = Number(body.cacheLimitBytes);
       if (typeof body.autoClassify === 'boolean') patch.autoClassify = body.autoClassify;
+      if (typeof body.neteaseCookie === 'string') patch.neteaseCookie = String(body.neteaseCookie).trim();
       await settings.update(patch);
       const e = eff();
       media = new MediaCache(e.mediaDir, e.mediaQuality, e.downloadConcurrency, cfg.logger);
+      netease.setNeteaseCookie(e.neteaseCookie);
       try {
         fsSync.mkdirSync(e.mediaDir, { recursive: true });
       } catch {
@@ -590,6 +606,42 @@ export function createServer(cfg: BackendConfig) {
       const page = await client.search.playlists({ keyword: url.searchParams.get('keywords') || '', limit: Number(url.searchParams.get('limit') || 20) });
       return sendJson(res, 200, { ok: true, ...page });
     }
+    // 网易云搜索（来源适配器）
+    if (p === '/api/search/netease' && method === 'GET') {
+      const kw = url.searchParams.get('keywords') || '';
+      const kind = url.searchParams.get('type') || 'song';
+      const limit = Number(url.searchParams.get('limit') || 20);
+      if (kind === 'playlist') return sendJson(res, 200, { ok: true, kind, items: await netease.searchPlaylists(kw, limit) });
+      return sendJson(res, 200, { ok: true, kind: 'song', items: await netease.searchSongs(kw, limit) });
+    }
+    // 从网易云导入（歌单 / 单曲）到指定舞种
+    if (p === '/api/source/netease/import' && method === 'POST') {
+      if (!isAdmin) return sendJson(res, 403, { ok: false, error: 'forbidden' });
+      const body = await readBody(req);
+      const type = String(body.type || '未分类');
+      const input = String(body.input || '');
+      const limit = Number(body.limit ?? 1000);
+      const parsed = netease.extractNeId(input);
+      if (!parsed) return sendJson(res, 400, { ok: false, error: '无法解析网易云链接/ID' });
+      let items: netease.NeSong[] = [];
+      let name = '';
+      if (parsed.kind === 'playlist') {
+        const d = await netease.playlistDetail(parsed.id, limit);
+        items = d.songs;
+        name = d.name;
+      } else {
+        const d = await netease.songDetail([parsed.id]);
+        items = d;
+        name = d[0]?.name ?? '';
+      }
+      const r = await library.addExternalSongs(
+        type,
+        items.map((s) => ({ id: s.id, name: s.name, artists: s.artists, album: s.album, durationMs: s.durationMs, coverUrl: s.coverUrl })),
+        'netease',
+      );
+      const taskId = body.download ? await queueDownloads(r.newMids, type) : undefined;
+      return sendJson(res, 200, { ok: true, source: 'netease', type, name, added: r.added, skipped: r.skipped, queued: body.download ? r.newMids.length : 0, taskId });
+    }
 
     /* -------------------------------- 歌曲 -------------------------------- */
     if (p === '/api/song/detail' && method === 'GET') {
@@ -607,10 +659,16 @@ export function createServer(cfg: BackendConfig) {
         const u = path.isAbsolute(local) ? `/api/song/stream?mid=${encodeURIComponent(mid)}` : `/media/${local}`;
         return sendJson(res, 200, { ok: true, data: { songmid: mid, quality: eff().mediaQuality, url: u, local: true, expiresAt: null } });
       }
+      if (hit?.song.source === 'netease') {
+        const nu = await netease.songUrl(hit.song.mid);
+        if (eff().autoDownload && !hit.song.file) media.enqueue(mid, () => assetFetcher(mid), { onDone: onDownloaded });
+        if (!nu) return sendJson(res, 502, { ok: false, error: 'NETEASE_UNSUPPORTED', message: '网易云该曲无直链（可能需登录 Cookie 或会员）' });
+        return sendJson(res, 200, { ok: true, data: { songmid: mid, quality: '320', url: nu, local: false, expiresAt: null } });
+      }
       const client = session ? await pool.userClient(session) : await pool.libraryClient();
       const u = await client.songs.url({ songmid: mid, quality });
       if (hit && eff().autoDownload && !hit.song.file) {
-        media.enqueue(mid, await pool.libraryClient(), { onDone: onDownloaded });
+        media.enqueue(mid, () => assetFetcher(mid), { onDone: onDownloaded });
       }
       return sendJson(res, 200, { ok: true, data: { ...u, local: false } });
     }
@@ -630,11 +688,24 @@ export function createServer(cfg: BackendConfig) {
         res.end();
         return;
       }
+      if (hit?.song.source === 'netease') {
+        const nu = await netease.songUrl(hit.song.mid);
+        if (eff().autoDownload && !hit.song.file) media.enqueue(mid, () => assetFetcher(mid), { onDone: onDownloaded });
+        if (!nu) {
+          const nb = Buffer.from(JSON.stringify({ ok: false, error: 'NETEASE_UNSUPPORTED', message: '网易云该曲无直链（可能需登录 Cookie 或会员）' }), 'utf8');
+          res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': String(nb.length) });
+          res.end(nb);
+          return;
+        }
+        res.writeHead(302, { Location: nu });
+        res.end();
+        return;
+      }
       const client = session ? await pool.userClient(session) : await pool.libraryClient();
       const u = await client.songs.url({ songmid: mid, quality });
       // 点击播放即后台缓存：一边用 QQ 直链播，一边下载到本地（下次即离线）
       if (hit && eff().autoDownload && !hit.song.file) {
-        media.enqueue(mid, await pool.libraryClient(), { onDone: onDownloaded });
+        media.enqueue(mid, () => assetFetcher(mid), { onDone: onDownloaded });
       }
       res.writeHead(302, { Location: u.url });
       res.end();
@@ -643,8 +714,14 @@ export function createServer(cfg: BackendConfig) {
     // 歌词：默认返回 text/plain（给 APlayer lrc 用），?json=1 返回 JSON
     if (p === '/api/song/lyric' && method === 'GET') {
       const mid = url.searchParams.get('mid') || '';
-      const client = await pool.anonymous();
-      const lyr = await client.songs.lyric({ songmid: mid });
+      const hit = library.findByMid(mid);
+      let lyr: { lyric: string; trans?: string | null };
+      if (hit?.song.source === 'netease') {
+        lyr = await netease.lyric(hit.song.mid);
+      } else {
+        const client = await pool.anonymous();
+        lyr = await client.songs.lyric({ songmid: mid });
+      }
       if (url.searchParams.get('json')) return sendJson(res, 200, { ok: true, data: lyr });
       const buf = Buffer.from(lyr.lyric || '', 'utf8');
       res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Content-Length': String(buf.length), 'Cache-Control': 'public, max-age=86400' });

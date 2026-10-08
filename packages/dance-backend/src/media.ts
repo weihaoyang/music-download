@@ -88,23 +88,36 @@ export class MediaCache {
   }
 
   /** 同一 mid 的并发下载合并为一个（避免同一临时文件互相覆盖） */
-  ensure(client: QQMusicClient, mid: string): Promise<string> {
+  private ensureFile(mid: string, producer: (tmpPath: string) => Promise<void>): Promise<string> {
     const existing = this.inflight.get(mid);
     if (existing) return existing;
-    const p = this.doEnsure(client, mid).finally(() => this.inflight.delete(mid));
+    const p = (async () => {
+      const file = this.fileFor(mid);
+      if (await this.exists(file)) return file;
+      const dest = this.absPath(file);
+      const tmp = `${dest}.part`;
+      await producer(tmp);
+      await this.normalizeToMp3(tmp, dest, mid);
+      return file;
+    })().finally(() => this.inflight.delete(mid));
     this.inflight.set(mid, p);
     return p;
   }
 
-  /** 确保本地有该歌曲的音频（统一 mp3），返回文件名（失败抛错） */
-  private async doEnsure(client: QQMusicClient, mid: string): Promise<string> {
-    const file = this.fileFor(mid);
-    if (await this.exists(file)) return file;
-    const dest = this.absPath(file);
-    const tmp = `${dest}.part`;
-    await client.songs.downloadToFile({ songmid: mid, quality: this.quality, destPath: tmp });
-    await this.normalizeToMp3(tmp, dest, mid);
-    return file;
+  /** QQ 音乐：确保本地有该歌曲的音频（统一 mp3） */
+  ensure(client: QQMusicClient, mid: string): Promise<string> {
+    return this.ensureFile(mid, async (tmp) => {
+      await client.songs.downloadToFile({ songmid: mid, quality: this.quality, destPath: tmp });
+    });
+  }
+
+  /** 任意直链（网易云 / HTTP 来源）：下载到本地并转 mp3 */
+  ensureFromUrl(url: string, mid: string): Promise<string> {
+    return this.ensureFile(mid, async (tmp) => {
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(`下载失败 HTTP ${r.status}`);
+      await fs.writeFile(tmp, Buffer.from(await r.arrayBuffer()));
+    });
   }
 
   /** 把下载到的文件归一化为 mp3：已是 mp3 直接改名；否则 ffmpeg 转码。 */
@@ -144,16 +157,16 @@ export class MediaCache {
     });
   }
 
-  /** 后台队列下载（受限并发） */
+  /** 后台队列下载（受限并发）；fetcher 返回本地文件名 */
   enqueue(
     mid: string,
-    client: QQMusicClient,
+    fetcher: () => Promise<string>,
     opts: { onStart?: (mid: string) => void; onDone?: (mid: string, file: string | null, sizeBytes: number) => void } = {},
   ): void {
     this.queue.push(async () => {
       opts.onStart?.(mid);
       try {
-        const file = await this.ensure(client, mid);
+        const file = await fetcher();
         const size = await this.sizeOf(file);
         this.logger.info(`[media] 已缓存 ${mid} -> ${file}`);
         opts.onDone?.(mid, file, size);

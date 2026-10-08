@@ -24,6 +24,8 @@ export interface BackendConfig {
   cacheLimitBytes: number;
   /** 播放缓存后，对「未分类」的歌自动识别舞种 */
   autoClassify: boolean;
+  /** 网易云音乐登录 Cookie（MUSIC_U=...），用于其播放直链；空=匿名 */
+  neteaseCookie: string;
   logger: Logger;
 }
 
@@ -51,6 +53,7 @@ export function loadConfig(): BackendConfig {
     downloadConcurrency: Number(file.downloadConcurrency ?? 3),
     cacheLimitBytes: Number(file.cacheLimitBytes ?? 20 * 1024 * 1024 * 1024),
     autoClassify: file.autoClassify !== false,
+    neteaseCookie: String(file.neteaseCookie ?? ''),
     logger: console,
   };
   fs.mkdirSync(cfg.dataDir, { recursive: true });

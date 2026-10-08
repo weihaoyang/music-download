@@ -10,6 +10,8 @@ export interface RuntimeSettings {
   cacheLimitBytes?: number;
   /** 播放缓存后自动识别「未分类」舞种 */
   autoClassify?: boolean;
+  /** 网易云音乐登录 Cookie（MUSIC_U=...） */
+  neteaseCookie?: string;
 }
 
 /** 运行时设置（管理端可改，落盘 data/settings.json） */

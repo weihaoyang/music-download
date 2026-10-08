@@ -32,6 +32,8 @@ export interface LibrarySong {
   playedAt?: number | null;
   /** 是否属于「我喜欢」合集（稳定保留，识别舞种不会移出） */
   liked?: boolean;
+  /** 来源：'qqmusic' | 'netease'（默认 qqmusic） */
+  source?: string;
 }
 
 /** 默认曲库：按舞种分类的元数据缓存，浏览/编排零外部依赖 */
@@ -113,6 +115,7 @@ export class LibraryStore {
         type,
         addedAt: Date.now(),
         file: null,
+        source: 'qqmusic',
       });
       seen.add(s.mid);
       newMids.push(s.mid);
@@ -124,6 +127,43 @@ export class LibraryStore {
 
   importDetail(type: string, detail: PlaylistDetail): Promise<{ added: number; skipped: number; newMids: string[] }> {
     return this.addSongs(type, detail.songs);
+  }
+
+  /** 加入「外部来源」（网易云等）的歌曲 */
+  async addExternalSongs(
+    type: string,
+    items: Array<{ id: string; name: string; artists?: string[]; album?: string | null; durationMs?: number; coverUrl?: string | null }>,
+    source: string,
+  ): Promise<{ added: number; skipped: number; newMids: string[] }> {
+    const arr = this.data[type] ?? (this.data[type] = []);
+    const seen = new Set(this.allSongs().map((s) => s.mid));
+    let added = 0;
+    let skipped = 0;
+    const newMids: string[] = [];
+    for (const it of items) {
+      const mid = String(it.id ?? '');
+      if (!mid || seen.has(mid)) {
+        skipped++;
+        continue;
+      }
+      arr.push({
+        mid,
+        name: String(it.name ?? ''),
+        artists: it.artists ?? [],
+        album: it.album ?? null,
+        durationMs: it.durationMs ?? 0,
+        coverUrl: it.coverUrl ?? null,
+        type,
+        addedAt: Date.now(),
+        file: null,
+        source,
+      });
+      seen.add(mid);
+      newMids.push(mid);
+      added++;
+    }
+    await this.save();
+    return { added, skipped, newMids };
   }
 
   /** 加入/更新「本地文件」歌曲（file 可为绝对路径），返回是否新增 */
@@ -148,6 +188,7 @@ export class LibraryStore {
       type,
       addedAt: Date.now(),
       file: song.file,
+      source: 'local',
     });
     await this.save();
     return true;

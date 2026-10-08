@@ -12,6 +12,8 @@ export interface RuntimeSettings {
   autoClassify?: boolean;
   /** 网易云音乐登录 Cookie（MUSIC_U=...） */
   neteaseCookie?: string;
+  /** 百度网盘登录 Cookie（BDUSS=...; STOKEN=...） */
+  baiduCookie?: string;
 }
 
 /** 运行时设置（管理端可改，落盘 data/settings.json） */

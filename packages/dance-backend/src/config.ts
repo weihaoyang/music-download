@@ -26,6 +26,8 @@ export interface BackendConfig {
   autoClassify: boolean;
   /** 网易云音乐登录 Cookie（MUSIC_U=...），用于其播放直链；空=匿名 */
   neteaseCookie: string;
+  /** 百度网盘登录 Cookie（BDUSS=...; STOKEN=...），用于分享解析与下载 */
+  baiduCookie: string;
   logger: Logger;
 }
 
@@ -54,6 +56,7 @@ export function loadConfig(): BackendConfig {
     cacheLimitBytes: Number(file.cacheLimitBytes ?? 20 * 1024 * 1024 * 1024),
     autoClassify: file.autoClassify !== false,
     neteaseCookie: String(file.neteaseCookie ?? ''),
+    baiduCookie: String(file.baiduCookie ?? ''),
     logger: console,
   };
   fs.mkdirSync(cfg.dataDir, { recursive: true });

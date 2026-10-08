@@ -15,6 +15,7 @@ import { SetlistStore, generateSetlist, type EventMeta } from './setlist';
 import { SettingsStore } from './settings';
 import { analyze } from './classifier';
 import * as netease from './sources/netease';
+import * as pan from './sources/pan';
 import { scanDanceDir, parseDanceFileName, coreName, localMid } from './localscan';
 import { sendJson, readBody, parseCookies, setCookie, clearCookie } from './http';
 
@@ -92,6 +93,7 @@ export function createServer(cfg: BackendConfig) {
       cacheLimitBytes: s.cacheLimitBytes ?? cfg.cacheLimitBytes,
       autoClassify: s.autoClassify ?? cfg.autoClassify,
       neteaseCookie: s.neteaseCookie ?? cfg.neteaseCookie,
+      baiduCookie: s.baiduCookie ?? cfg.baiduCookie,
     };
   }
 
@@ -109,6 +111,7 @@ export function createServer(cfg: BackendConfig) {
     const e = eff();
     media = new MediaCache(e.mediaDir, e.mediaQuality, e.downloadConcurrency, cfg.logger);
     netease.setNeteaseCookie(e.neteaseCookie);
+    pan.setBaiduCookie(e.baiduCookie);
     try {
       fsSync.mkdirSync(e.mediaDir, { recursive: true });
     } catch {
@@ -188,6 +191,10 @@ export function createServer(cfg: BackendConfig) {
     const src = hit.song.source;
     if (src === 'http') return hit.song.url || null;
     if (src === 'netease') return netease.songUrl(hit.song.mid);
+    if (src === 'pan') {
+      const ref = pan.decodeRef(hit.song.url || '');
+      return ref ? pan.resolveDlink(ref) : null;
+    }
     return null;
   }
 
@@ -372,10 +379,12 @@ export function createServer(cfg: BackendConfig) {
       if (body.cacheLimitBytes !== undefined) patch.cacheLimitBytes = Number(body.cacheLimitBytes);
       if (typeof body.autoClassify === 'boolean') patch.autoClassify = body.autoClassify;
       if (typeof body.neteaseCookie === 'string') patch.neteaseCookie = String(body.neteaseCookie).trim();
+      if (typeof body.baiduCookie === 'string') patch.baiduCookie = String(body.baiduCookie).trim();
       await settings.update(patch);
       const e = eff();
       media = new MediaCache(e.mediaDir, e.mediaQuality, e.downloadConcurrency, cfg.logger);
       netease.setNeteaseCookie(e.neteaseCookie);
+      pan.setBaiduCookie(e.baiduCookie);
       try {
         fsSync.mkdirSync(e.mediaDir, { recursive: true });
       } catch {
@@ -629,6 +638,19 @@ export function createServer(cfg: BackendConfig) {
       if (kind === 'playlist') return sendJson(res, 200, { ok: true, kind, items: await netease.searchPlaylists(kw, limit) });
       return sendJson(res, 200, { ok: true, kind: 'song', items: await netease.searchSongs(kw, limit) });
     }
+    // 可用下载来源与登录状态
+    if (p === '/api/sources' && method === 'GET') {
+      return sendJson(res, 200, {
+        ok: true,
+        data: [
+          { id: 'qqmusic', label: 'QQ音乐', kind: 'online', auth: true },
+          { id: 'netease', label: '网易云音乐', kind: 'online', auth: netease.hasNeteaseCookie() },
+          { id: 'local', label: '本地/社团文件夹', kind: 'local', auth: true },
+          { id: 'http', label: '自建服务器直链', kind: 'online', auth: true },
+          { id: 'pan', label: '百度网盘', kind: 'online', auth: pan.hasBaiduCookie() },
+        ],
+      });
+    }
     // 从网易云导入（歌单 / 单曲）到指定舞种
     if (p === '/api/source/netease/import' && method === 'POST') {
       if (!isAdmin) return sendJson(res, 403, { ok: false, error: 'forbidden' });
@@ -718,6 +740,45 @@ export function createServer(cfg: BackendConfig) {
         skipped += r.skipped;
       }
       return sendJson(res, 200, { ok: true, source: 'http', added, skipped });
+    }
+    // 百度网盘来源：解析分享链接 → 列音频 → 入库（播放时再解析 dlink）
+    if (p === '/api/source/pan/import' && method === 'POST') {
+      if (!isAdmin) return sendJson(res, 403, { ok: false, error: 'forbidden' });
+      const body = await readBody(req);
+      const type = String(body.type || '未分类');
+      const shareUrl = String(body.shareUrl || '');
+      const pwd = body.pwd ? String(body.pwd) : undefined;
+      if (!shareUrl) return sendJson(res, 400, { ok: false, error: 'shareUrl required' });
+      try {
+        const { items, ref } = await pan.listShareAudio(shareUrl, pwd);
+        const byType = new Map<string, Array<{ id: string; name: string; artists: string[]; album: string | null; durationMs: number; coverUrl: string | null; url: string }>>();
+        for (const it of items) {
+          const parsed = parseDanceFileName(it.name);
+          const ty = parsed?.type || type;
+          const item = {
+            id: 'pan:' + it.fsId,
+            name: parsed?.name || it.name.replace(/\.[^.]+$/, ''),
+            artists: parsed?.artists ?? [],
+            album: null,
+            durationMs: parsed?.durationMs ?? 0,
+            coverUrl: null,
+            url: pan.encodeRef(ref, it),
+          };
+          const arr = byType.get(ty) ?? [];
+          arr.push(item);
+          byType.set(ty, arr);
+        }
+        let added = 0;
+        let skipped = 0;
+        for (const [ty, list] of byType) {
+          const r = await library.addExternalSongs(ty, list, 'pan');
+          added += r.added;
+          skipped += r.skipped;
+        }
+        return sendJson(res, 200, { ok: true, source: 'pan', shareUrl, total: items.length, added, skipped });
+      } catch (e) {
+        return sendJson(res, 502, { ok: false, error: 'PAN_ERROR', message: (e as Error).message });
+      }
     }
 
     /* -------------------------------- 歌曲 -------------------------------- */

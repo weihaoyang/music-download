@@ -132,7 +132,8 @@ const poll = setInterval(async () => {
 - **点击播放即缓存**：`/api/song/stream`（以及 `/api/song/url`）未命中缓存时，一边用 QQ 直链播放，一边后台下载到本地，下次即离线。
 - **缓存上限（默认 20GiB）**：`cacheLimitBytes`（`config.json` / `PUT /api/settings` 可改，`0`=不限）；超限后按 **LRU**（`playedAt` 最近播放时间）淘汰最久未播放的，清到 90% 水位；**只删缓存目录内的文件，绝不动用户本地文件**。
 - **统一转 MP3**：下载后用 `ffprobe` 探格式，非 mp3（flac/ape/m4a 等）用 `ffmpeg` 转成 mp3（**HQ/320 本身即 mp3**，无需解密）；缓存文件统一命名 `<mid>.mp3`。若遇加密文件（客户端 `.mflac/.mgg` 等）会告警并保留原文件。
-- **「我喜欢」导入**：`POST /api/library/import-liked`（admin）走 `music.srfDissInfo.DissInfo/CgiGetDiss`（dirid=201），默认**只导元数据**（`download:false`），配合「点击播放即缓存」避免一次性下载整库。
+- **「我喜欢」导入**：`POST /api/library/import-liked`（admin）走 `music.srfDissInfo.DissInfo/CgiGetDiss`（dirid=201），默认**只导元数据**（`download:false`），配合「点击播放即缓存」避免一次性下载整库。**优先用当前登录用户账号，其次客户端镜像**（bridge 不在线会 401）。
+- **「我喜欢」是稳定合集**：导入时给歌曲打 `liked` 标记；`GET /api/library/list?liked=1` 返回合集（跨舞种、不因识别而移出）；`/api/library/types` 追加 `__liked__`。自动识别只改舞种标签，不移出合集。
 - **批量「缓存 + 分类」**：`POST /api/library/cache-classify` `{type?, limit?}`（admin）——把某舞种（默认「未分类」）的曲子**逐首下载 HQ 并自动识别舞种**，未缓存的先下载、已缓存的直接分析，受缓存上限约束；返回 `taskId` 看进度。
 - **缓存目录校正**：`POST /api/library/scan`（admin）把缓存目录里实际存在的文件重新挂回曲库、清掉缺失的 `file` 标记。
 

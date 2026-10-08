@@ -195,9 +195,16 @@ export default function App() {
   }
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const wantLiked = params.get('liked');
+    const wantType = params.get('type');
     loadTypes().then((t) => {
-      const first = t.find((x) => x.count > 0) || t[0];
-      if (first) setActiveType(first.type);
+      if (wantLiked) setActiveType('__liked__');
+      else if (wantType) setActiveType(wantType);
+      else {
+        const first = t.find((x) => x.count > 0) || t[0];
+        if (first) setActiveType(first.type);
+      }
       setWeights((w) => {
         const n = { ...w };
         for (const x of t) if (n[x.type] === undefined) n[x.type] = 1;

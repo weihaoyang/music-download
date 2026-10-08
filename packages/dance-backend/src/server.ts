@@ -388,7 +388,8 @@ export function createServer(cfg: BackendConfig) {
       const type = String(body.type || '未分类');
       const download = !!body.download;
       const limit = Number(body.limit ?? 0);
-      const client = await pool.libraryClient();
+      // 优先用当前登录用户自己的账号；否则用客户端镜像的会员账号
+      const client = session ? await pool.userClient(session) : await pool.libraryClient();
       const all: Song[] = [];
       let total = 0;
       for (let pageNum = 1; pageNum <= 50; pageNum++) {

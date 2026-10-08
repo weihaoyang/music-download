@@ -41,7 +41,7 @@ async function findMid(mid, types) {
     ok('netease import', imp.body.ok === true, { added: imp.body.added });
     const found = await findMid(String(id), types);
     ok('  可检索到(来源=netease)', found && found.source === 'netease', found && { type: found.type, source: found.source });
-    if (found) await del(String(id));
+    if (found && imp.body.added > 0) await del(String(id)); // 仅清理本次新增，避免删掉既有曲目
   }
 
   console.log('== 4. QQ 单曲导入 + 清理 ==');

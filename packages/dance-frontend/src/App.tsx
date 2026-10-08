@@ -272,6 +272,8 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     const wantLiked = params.get('liked');
     const wantType = params.get('type');
+    const wantSource = params.get('source');
+    if (wantSource) setSourceFilter(wantSource);
     loadTypes().then((t) => {
       if (wantLiked) setActiveType('__liked__');
       else if (wantType) setActiveType(wantType);

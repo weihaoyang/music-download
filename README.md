@@ -1,216 +1,143 @@
-# music-fetcher（补歌服务原型）
+# 舞曲排曲台（HBDC 交谊舞曲库与排曲系统）
 
-一个给排曲 / 点歌系统用的**本地补歌服务**：搜索 QQ 音乐 → 获取音频 → 规范化入库，
-让「曲库里没有的歌」能一键补进本地曲库。
+面向国标交谊舞社团的**曲库 + 排曲 + 播放 + 大屏**系统：多来源导入舞曲、自动识别舞种、按规则排曲、
+舞会大屏投放、离线缓存播放。
 
-本项目是**原型 + 架构骨架**：核心流水线（搜索 / 触发 / 解密 / 监听 / 规范化 / 入库 / 任务回执）
-都已跑通，并用 `mock` 模式做到**不装 QQ 音乐也能自测**。真正的下载触发引擎留了两种可插拔实现。
-
----
-
-## 一、为什么是这么设计的
-
-最初的思路是：**歌单自动下载 + TuneFree 解密**。
-这条路的核心问题不在解密，而在 **Trigger（谁去触发客户端下载）**：
-
-- TuneFree（你发的那个仓库）只做**解密**：用 Frida 注入运行中的 `QQMusic.exe`，把本地
-  `.mflac / .mgg` 解成 MP3/FLAC。它不搜索、也不下载。
-- QQ 音乐「自动下载新增歌曲」官方确实存在，官方原话：
-  *「不同终端下添加歌曲到已开启此开关的歌单，歌曲将自动下载。」*
-  但该说明挂在**移动端**，**PC 客户端是否有这个开关尚未验证**。
-- 而 TuneFree 需要加密文件落在 **PC** 上，所以下载必须发生在 PC 客户端。
-
-**所以本项目的做法是：把「获取音频」和「入库」解耦，引擎可插拔。**
-无论那个 PC 开关存不存在，项目都不会白做。
-
-| 引擎 | 怎么工作 | 优点 | 缺点 |
-|---|---|---|---|
-| `web`（默认） | 本地 `QQMusicApi` 服务带你的会员 cookie，`/song/url` 拿**直链**直接下载（拿到就是可播放音频，**不需要 TuneFree**） | 今天就能跑通，不依赖客户端 | cookie 会过期，需要偶尔扫码刷新 |
-| `client` | 把歌加进「补歌队列」歌单 → PC 客户端自动下载 `.mflac` → 本项目监听到文件后调 TuneFree 解密入库 | 复用你已验证的 TuneFree，客户端会话极稳 | 依赖 PC「自动下载新增歌曲」开关；需先实测 |
-
-> 更成熟的长期方案排序：
-> 1. **引擎 `web` + 可刷新的 cookie**：最省事、最稳，是推荐主链路。
-> 2. **引擎 `client`（你思路的产品化）**：验证 PC 开关后作为「零 token 依赖」的第二引擎。
-> 3. 直接 hook 客户端内部下载函数（Frida RPC）：体验最好但最不成熟、最易随版本失效，**不建议作为唯一方案**。
->
-> 本项目把 1 和 2 都留好了口子。
+技术形态是一个 monorepo：**数据 SDK + 后端 + 前端**，前端为可部署的静态产物，无 CDN 依赖。
 
 ---
 
-## 二、流水线
+## 一、组成
 
-```
-排曲页面 / 任意调用方
-      │  GET /search?q=...
-      │  POST /fetch { mid, mediaId, title, artist, engine? }
-      ▼
-  补歌服务 (Node, 无三方依赖)
-      │
-      ├── engine=web ──► QQMusicApi(/song/url) ──► 直链下载 ─────────────┐
-      │                                                                  │
-      └── engine=client ─► QQMusicApi(/songlist/add) ─► 客户端自动下载    │
-                                                         │                │
-                                             .mflac/.mgg 落入下载目录      │
-                                                         ▼                │
-                                          Watcher 轮询监听（等文件大小稳定）│
-                                                         ▼                │
-                                          TuneFree CLI 解密 ──► MP3 ──────┤
-                                                                          ▼
-                                     规范化命名 + 防覆盖 + 移入曲库目录
-                                                                          ▼
-                                                  Job 状态回执（/jobs/:id）
-```
+| 目录 | 说明 | 文档 |
+|---|---|---|
+| `packages/qqmusic-sdk` | QQ 音乐数据 SDK（搜索/详情/直链/歌单/我喜欢/扫码登录/续期），TypeScript | [README](packages/qqmusic-sdk/README.md) · [CONTRACT](packages/qqmusic-sdk/CONTRACT.md) |
+| `packages/dance-backend` | Node/TS 数据后端（曲库、导入、分类、缓存、排曲、任务） | [README](packages/dance-backend/README.md) |
+| `packages/dance-frontend` | Vite + React + Semi 前端（控制台 `/`、播放 `/play`、大屏 `/wall`） | [README](packages/dance-frontend/README.md) |
+| `tools/qqclient-bridge` | Frida 客户端镜像：从运行中的 QQ 音乐客户端取 live cookie（会员账号、不过期） | [README](tools/qqclient-bridge/README.md) |
 
-任务状态机：`queued → queueing/downloading → converting → importing → imported | failed`。
+架构与全量进度见 **[docs/qqmusic-sdk-plan.md](docs/qqmusic-sdk-plan.md)**，
+「来源 / 自制版本 / 多下载来源」设计见 **[docs/library-source-architecture.md](docs/library-source-architecture.md)**。
+
+---
+
+## 二、功能
+
+- **曲库**：按舞种浏览；支持**来源筛选**（QQ音乐 / 网易云 / 本地 / 直链 / 网盘）；
+  「我喜欢」稳定合集（跨舞种、识别后不移出）；每首显示 **舞种 / 曲风 / BPM / 稳定性 / 来源 / 缓存状态**。
+- **多来源导入**：
+  - **QQ音乐**：歌单导入 / 单曲加入 / 克隆到我的歌单；
+  - **网易云音乐**：搜索、歌单/单曲链接或 ID 导入（免加密端点；部分歌需 `neteaseCookie`）；
+  - **本地/社团文件夹**：按《HBDC 规则》文件名 `舞种-歌名-歌手` 扫描入库（文件原位）；
+  - **自建服务器直链**：URL 列表导入；
+  - **百度网盘**：分享链接 + 提取码（需 `baiduCookie`）。
+- **自动识别舞种**：ffmpeg 解码 + aubio 测速 → 按《HBDC 规则 表3》BPM 区间映射到
+  **慢三/平四/伦巴/并四/快三/慢四/吉特巴**；曲风（欢快/舒缓）用于八度纠错与边界判定；
+  另判「是否适合作为舞曲」。见 plans §28/§35。
+- **缓存策略**：点击播放即缓存（HQ 320k，统一转 mp3），**20GB 上限 + LRU 淘汰**，
+  也可对某舞种批量「缓存并分类」。
+- **排曲**：目标时长 + 各舞种权重生成；**拖拽排序 / 一键乱序 / 按舞种归组 / 单曲裁剪**；
+  保存、导出长图（html2canvas）、导出/导入传递文件。
+- **播放与大屏**：`/play`（APlayer，含歌词）、`/wall`（howler + anime：封面交叉溶解、Ken Burns、金色光晕、音频淡入淡出切歌）。
+- **明/暗主题**、**管理员设置**（缓存目录/上限/音质、Cookie、按文件名校准）。
 
 ---
 
 ## 三、快速开始
 
-要求：Node ≥ 18（本机是 v24，无需 `npm install`，零依赖）。
+要求：Node ≥ 18；系统 `ffmpeg`/`ffprobe` 在 PATH（分类与转码用）。
 
 ```powershell
-cd D:\music-download
+# 1) SDK
+cd packages\qqmusic-sdk
+npm install
+npm run build
 
-# 1) 离线自测整条流水线（不需要 QQ 音乐 / 网络）
-node scripts/selftest.js
+# 2) 后端（默认 http://127.0.0.1:8790）
+cd ..\dance-backend
+npm install
+npm run build
+npm start
 
-# 2) 启动服务（默认 mock 转换，不会真的调用 TuneFree）
-node src/index.js
-# 打开 http://127.0.0.1:8787 使用内置补歌控制台
+# 3) 前端（构建产物由后端托管，浏览器访问 http://127.0.0.1:8790/）
+cd ..\dance-frontend
+npm install
+npm run build
 ```
 
-CLI：
+**客户端镜像（推荐，用于补歌/下载的会员账号，不过期）**：
+保持 QQ 音乐客户端登录并运行，然后：
 
 ```powershell
-node bin/cli.js search 晴天
-node bin/cli.js fetch 晴天 --type 320
-node bin/cli.js fetch 0039MnYb0qxYhV --mid --engine client
-node bin/cli.js convert "C:\path\to\xxx.mflac"     # 手动解密并入库
-node bin/cli.js watch                              # 只跑目录监听
-node bin/cli.js jobs
+cd tools\qqclient-bridge
+python bridge.py     # 暴露 http://127.0.0.1:8899/cookie
 ```
 
-配置：复制 `config.example.json` 为 `config.json` 后修改（`config.json` 已被 gitignore）。
-关键项：
+**配置**（`packages/dance-backend/config.json`，已被 gitignore）：
 
-- `paths.downloadDir`：QQ 音乐 PC 客户端的**下载/缓存目录**。
-- `paths.libraryDir`：你的本地曲库目录。
-- `paths.tuneFreeExe`：TuneFree 的 `main.exe`（命令行版）；留空则用 mock。
-- `paths.musicApiBase`：本地 QQMusicApi 服务地址（默认 `http://127.0.0.1:3300`）。
-- `engine.default`：`web` 或 `client`。
-- `engine.playlistDirId`：`client` 引擎用的「补歌队列」歌单 dirid。
-- `converter.mock`：`true` 时不调用 TuneFree，直接把加密文件当 mp3 拷出来（自测用）。
-- `import.naming`：`keep`（保留原文件名）或 `artist-title`（重命名成「歌手 - 歌名」）。
-
----
-
-## 四、两种引擎的落地配置
-
-### 引擎 `web`（推荐先跑通）
-
-1. 起一个本地 QQMusicApi（成熟组件，负责签名/cookie）：
-   ```powershell
-   git clone https://github.com/jsososo/QQMusicApi.git
-   cd QQMusicApi && npm install && npm start     # 默认 http://127.0.0.1:3300
-   ```
-2. 用你的会员账号登录，让它拿到 cookie（详见该仓库文档；也可用其它仍维护的 fork，
-   如 `@sansenjian/qq-music-api`）。
-3. 本项目 `config.json` 里 `engine.default="web"`、`musicApiBase` 指向它即可。
-
-> 直链接口：`GET /song/url?id=<songmid>&mediaId=<media_mid>&type=320|flac`。
-> **付费歌曲的 `media_mid` 与 `songmid` 不同**，本项目会在缺失时自动用 `/song?songmid=` 补齐。
-
-### 引擎 `client`（你的思路）
-
-1. PC 客户端建一个歌单，例如「补歌队列」，**开启「自动下载新增歌曲」**（先确认 PC 版有没有此开关）。
-2. 把该歌单的 `dirid` 填到 `engine.playlistDirId`，`engine.default="client"`。
-3. 启动 QQ 音乐 PC 客户端并保持运行；TuneFree 别填 mock。
-4. `POST /fetch` 后：服务把歌加进歌单 → 客户端自动下载 `.mflac` 到 `downloadDir` →
-   Watcher 发现 → 调 TuneFree 解密 → 入库。
-5. 每首入库后源加密文件会被删除（`converter.keepSource=true` 时移到 `.work/done/`）。
-
----
-
-## 五、给你的排曲系统接入
-
-服务只暴露几个简单接口（`config.server.token` 非空时需带 `x-token` 或 `?token=`）：
-
-```
-GET  /health                        → 服务状态
-GET  /search?q=关键词&limit=10       → [{ mid, mediaId, title, artist, album, interval, pay }]
-POST /fetch  { mid, mediaId?, title?, artist?, type?, engine? }   → { id, status, ... }
-GET  /jobs/:id                      → 轮询任务进度
-GET  /jobs                          → 最近任务
+```json
+{
+  "port": 8790,
+  "mediaDir": "data/media",
+  "bridgeUrl": "http://127.0.0.1:8899/cookie",
+  "adminToken": "change-me",
+  "mediaQuality": "320",
+  "autoDownload": true,
+  "cacheLimitBytes": 21474836480
+}
 ```
 
-排曲页面的典型交互：搜索 → 展示候选（含是否付费）→ 用户确认「补这首歌」→ 轮询 `/jobs/:id`
-直到 `imported` → 刷新曲库。
-
-> 建议：搜索匹配可能出现同名/翻唱，**让用户在候选里点确认**，不要全自动取第一条。
-> 去重键建议用 QQ 音乐 `mid`，入库命名与你现有几千首曲库保持一致。
+- `neteaseCookie`（`MUSIC_U=...`）、`baiduCookie`（`BDUSS=...;STOKEN=...`）可在
+  前端「设置（管理员）」里填，或写进 config.json。
 
 ---
 
-## 六、先做这一步验证（决定用哪个引擎）
+## 四、常用脚本
 
-在本项目 `mock=true` 下先跑通流水线（已通过 `scripts/selftest.js`）。
-真实环境按顺序验证：
-
-1. **PC 自动下载是否可用**：PC 客户端 → 某歌单 → 找「自动下载新增歌曲」；
-   用任意方式把一首歌加进该歌单，看下载目录是否出现 `.mflac`。
-   - 有 → `client` 引擎可用。
-   - 没有 → 直接用 `web` 引擎。
-2. **TuneFree 可用**：把 `tuneFreeExe` 指向 `main.exe`，`mock=false`，
-   手动丢一个 `.mflac` 进 `downloadDir`，看是否自动转出 MP3。
-
----
-
-## 七、注意与已知限制
-
-- **权限/杀软**：TuneFree 用 Frida 注入，需足够权限，杀软会误报，记得加白。
-- **格式变化**：QQ 音乐若更新加密算法，TuneFree 需更新（本项目会报「未找到 MP3 输出」）。
-- **半截文件**：Watcher 用「文件大小连续 N 轮不变」判断下载完成（`watcher.stableRounds`）。
-- **TuneFree 逐首调用**：原型为每首单独调一次（都要注入一次）。量大时建议改成批量传入。
-- **任务与文件匹配**：`client` 引擎目前靠「歌名」把任务和下载文件关联，可能不准；
-  更稳的做法是读客户端下载库或从 TuneFree 输出名反查。
-- **转码**：`web` 引擎若拿到 `.flac/.ape`，当前直接入库（未转 MP3）。需要统一成 MP3 时，
-  用 `ffmpeg` 转码，本项目已预留 `paths.ffmpeg`。
-- **合规**：仅供个人会员范围内的合法使用，请勿传播。
-
----
-
-## 八、目录结构
-
-```
-config.example.json     配置样例
-src/
-  config.js             配置加载 + 默认值 + 环境变量覆盖
-  log.js                日志
-  qqmusic.js            搜索 / 直链 / 加歌单 / 下载
-  converter.js          调 TuneFree（或 mock）解密
-  importer.js           规范化命名 + 防覆盖 + 入库
-  jobs.js               任务存储（内存 + .work/jobs.json）
-  watcher.js            轮询监听下载目录 → 解密 → 入库
-  fetcher.js            引擎编排
-  server.js             HTTP API + 内置补歌控制台
-  index.js              入口
-bin/cli.js              命令行
-scripts/
-  selftest.js           离线自测
-  smoke.js              HTTP 冒烟测试
-  make-mock-mflac.js    造一个假加密文件用于测试
+```powershell
+cd packages\dance-backend
+node scripts\smoke-v6.js      # 全量冒烟（曲库/搜索/播放/排曲/缓存并分类/前端路由）
+node scripts\smoke-v7.js      # 多来源冒烟（来源列表/网易云/QQ单曲/本地/直链/网盘）
+node scripts\build-library.js # 按 library.config.json 批量离线构建
+cd ..\qqmusic-sdk && npm test # SDK 契约单测
 ```
 
 ---
 
-## 九、许可协议
-
-本项目以 **GNU General Public License v3.0（或更新版本）** 开源发布，
-版权归 **weihaoyang** 所有。完整条款见根目录 [LICENSE](LICENSE)。
+## 五、目录结构
 
 ```
-music-fetcher — 本地补歌服务（搜索 QQ 音乐 → 下载 → 解密 → 规范化入库）
+packages/
+  qqmusic-sdk/        数据 SDK（TypeScript，dist + .d.ts）
+  dance-backend/      Node 后端（src/、scripts/、data/ 为运行时数据，已 gitignore）
+  dance-frontend/     Vite 前端（src/、dist/）
+tools/
+  qqclient-bridge/    Frida 客户端镜像（Python）
+docs/
+  qqmusic-sdk-plan.md            规划 + 全量进度（§0–§35）
+  library-source-architecture.md 来源/自制/多来源架构设计
+src/                  【旧原型】早期 music-fetcher（Node 零依赖），保留作参考，已被 packages/ 取代
+```
+
+---
+
+## 六、注意
+
+- **合规**：仅供社团在会员/授权范围内的合法使用，请勿传播下载内容。
+- **TuneFree/解密**：本项目走各平台 API 直链，**HQ 即标准 mp3、无需解密**；客户端加密文件（`.mflac/.mgg` 等）
+  才需要 Unlock Music 之类的工具。
+- **续期限制**：`QQLogin` 对浏览器/扫码 cookie 均返回 `10006`，服务端无法自续；
+  长期有效依赖**客户端镜像**或用户重新扫码。
+
+---
+
+## 七、许可协议
+
+本项目以 **GNU General Public License v3.0（或更新版本）** 开源发布，版权归 **weihaoyang** 所有。
+完整条款见根目录 [LICENSE](LICENSE)。
+
+```
+hdbc-dance — 舞曲排曲台（多来源曲库 / 自动识别舞种 / 排曲 / 大屏）
 Copyright (C) 2026  weihaoyang
 
 This program is free software: you can redistribute it and/or modify
@@ -227,5 +154,4 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ```
 
-> 注意：GPLv3 是强 copyleft 许可。若你分发本项目的修改版，必须同样以 GPLv3（或更新版本）
-> 开放全部对应源码。本项目仅用于个人会员范围内的合法使用，请遵守相关服务条款，勿传播下载内容。
+> GPLv3 是强 copyleft 许可：分发本项目的修改版必须同样以 GPLv3（或更新版本）开放全部对应源码。

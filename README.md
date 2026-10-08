@@ -17,7 +17,8 @@
 | `tools/qqclient-bridge` | Frida 客户端镜像：从运行中的 QQ 音乐客户端取 live cookie（会员账号、不过期） | [README](tools/qqclient-bridge/README.md) |
 
 架构与全量进度见 **[docs/qqmusic-sdk-plan.md](docs/qqmusic-sdk-plan.md)**，
-「来源 / 自制版本 / 多下载来源」设计见 **[docs/library-source-architecture.md](docs/library-source-architecture.md)**。
+「来源 / 自制版本 / 多下载来源」设计见 **[docs/library-source-architecture.md](docs/library-source-architecture.md)**，
+端到端验收清单见 **[docs/acceptance.md](docs/acceptance.md)**。
 
 ---
 

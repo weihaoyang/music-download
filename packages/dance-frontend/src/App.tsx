@@ -1290,6 +1290,9 @@ export default function App() {
 
       <Modal title="连接 QQ 音乐" visible={loginOpen} footer={null} width={372} onCancel={() => setLoginOpen(false)}>
         <div style={{ textAlign: 'center' }}>
+          <div className="hint" style={{ marginBottom: 12, textAlign: 'left' }}>
+            扫码仅用于你个人账号的功能（我的歌单 / 克隆到我的歌单 / 把「我喜欢」导入你名下）。曲库浏览 / 下载 / 播放走客户端镜像的会员账号，无需扫码。
+          </div>
           {qr ? (
             <>
               <img src={qr.image} style={{ width: 210, height: 210, borderRadius: 12 }} />

@@ -529,10 +529,33 @@ export function createServer(cfg: BackendConfig) {
       if (!isAdmin) return sendJson(res, 403, { ok: false, error: 'forbidden' });
       const body = await readBody(req);
       const type = String(body.type || '');
-      const songs = type ? songsOfType(type) : library.allSongs();
+      const source = body.source ? String(body.source) : '';
+      let songs = type ? songsOfType(type) : library.allSongs();
+      if (source) songs = songs.filter((s) => (s.source || 'qqmusic') === source);
       const missing = songs.filter((s) => !s.file).map((s) => s.mid);
       const taskId = await queueDownloads(missing, type || null);
       return sendJson(res, 200, { ok: true, queued: missing.length, taskId });
+    }
+    // 按来源清空曲库（可顺带删除缓存文件；绝不删用户本地文件）
+    if (p === '/api/library/delete-by-source' && method === 'POST') {
+      if (!isAdmin) return sendJson(res, 403, { ok: false, error: 'forbidden' });
+      const body = await readBody(req);
+      const source = String(body.source || '');
+      if (!source || source === 'all') return sendJson(res, 400, { ok: false, error: 'source required' });
+      const purge = !!body.purgeFiles;
+      const files: string[] = [];
+      for (const s of library.allSongs()) {
+        if ((s.source || 'qqmusic') === source && s.file && !path.isAbsolute(s.file)) files.push(s.file);
+      }
+      const removed = await library.removeBySource(source);
+      let purged = 0;
+      if (purge) {
+        for (const f of files) {
+          await media.remove(f);
+          purged++;
+        }
+      }
+      return sendJson(res, 200, { ok: true, source, removed, purged });
     }
     if (p === '/api/library/song' && method === 'PUT') {
       if (!isAdmin) return sendJson(res, 403, { ok: false, error: 'forbidden' });

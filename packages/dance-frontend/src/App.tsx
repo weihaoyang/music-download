@@ -345,6 +345,32 @@ export default function App() {
       if (r.queued > 0) api<{ data: TaskItem }>('/api/tasks/' + r.taskId).then((t) => setTask(t.data)).catch(() => {});
     });
   }
+  function downloadBySource() {
+    setAdminToken(adminTokenState);
+    adminFetch<{ taskId: string; queued: number }>('/api/library/download', 'POST', { type: '', source: sourceFilter }).then((r) => {
+      Toast.info(`已加入缓存队列：${r.queued} 首`);
+      if (r.queued > 0) api<{ data: TaskItem }>('/api/tasks/' + r.taskId).then((t) => setTask(t.data)).catch(() => {});
+    });
+  }
+  function clearBySource() {
+    setAdminToken(adminTokenState);
+    const label = (SOURCE_OPTIONS.find((o) => o.value === sourceFilter) || {}).label || sourceFilter;
+    Modal.confirm({
+      title: '清空该来源',
+      content: `确定清空「${label}」来源的全部曲目吗？（连同其缓存文件；本地文件不会被删）`,
+      okText: '清空',
+      cancelText: '取消',
+      onOk: () => {
+        adminFetch<{ removed: number; purged: number }>('/api/library/delete-by-source', 'POST', { source: sourceFilter, purgeFiles: true })
+          .then((r) => {
+            Toast.success(`已清空「${label}」：${r.removed} 首（删除缓存 ${r.purged}）`);
+            loadTypes();
+            if (activeType) loadSongs(activeType);
+          })
+          .catch((e) => Toast.error('清空失败：' + e.message));
+      },
+    });
+  }
   function runCalibrate() {
     setAdminToken(adminTokenState);
     if (!calibDir.trim()) return Toast.warning('先填入舞曲文件夹路径');
@@ -764,6 +790,14 @@ export default function App() {
                     style={{ width: 130 }}
                     optionList={[{ value: 'all', label: '全部来源' }, ...SOURCE_OPTIONS]}
                   />
+                  {sourceFilter !== 'all' ? (
+                    <>
+                      <Button onClick={downloadBySource}>缓存本来源</Button>
+                      <Button theme="borderless" type="danger" onClick={clearBySource}>
+                        清空本来源
+                      </Button>
+                    </>
+                  ) : null}
                   <Button onClick={cacheMissing}>缓存缺失音频</Button>
                   <Button theme="solid" type="tertiary" onClick={autoClassify}>
                     自动分类

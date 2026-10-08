@@ -85,6 +85,16 @@ async function findMid(mid, types) {
   const pan = await j('/api/source/pan/import', { method: 'POST', headers: H, body: JSON.stringify({ type: '未分类', shareUrl: 'https://pan.baidu.com/s/1abcdEFG' }) });
   ok('pan 需 Cookie（或成功）', pan.body.ok === true || pan.body.error === 'SOURCE_ERROR' || pan.body.error === 'PAN_ERROR', { ok: pan.body.ok, error: pan.body.error });
 
+  console.log('== 8. 按来源批量操作 ==');
+  let url8 = null;
+  try { url8 = await require('../dist/sources/netease').songUrl('2652820720'); } catch { /* ignore */ }
+  if (url8) await j('/api/source/http/import', { method: 'POST', headers: H, body: JSON.stringify({ type: '未分类', urls: [url8] }) });
+  const dl = await j('/api/library/download', { method: 'POST', headers: H, body: JSON.stringify({ type: '', source: 'http' }) });
+  ok('按来源批量缓存', dl.body.ok === true, { queued: dl.body.queued });
+  await new Promise((r) => setTimeout(r, 1500));
+  const dbs = await j('/api/library/delete-by-source', { method: 'POST', headers: H, body: JSON.stringify({ source: 'http', purgeFiles: true }) });
+  ok('按来源清空', dbs.body.ok === true && dbs.body.removed >= 0, { removed: dbs.body.removed, purged: dbs.body.purged });
+
   console.log('\n==== v7 结果：PASS ' + pass + ' / FAIL ' + fail + ' ====');
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('FATAL', e); process.exit(2); });

@@ -270,4 +270,16 @@ export class LibraryStore {
     await this.save();
     return true;
   }
+
+  /** 删除某来源的全部曲目（不删磁盘文件），返回删除数量 */
+  async removeBySource(source: string): Promise<number> {
+    let n = 0;
+    for (const type of Object.keys(this.data)) {
+      const before = this.data[type].length;
+      this.data[type] = this.data[type].filter((s) => (s.source || 'qqmusic') !== source);
+      n += before - this.data[type].length;
+    }
+    if (n) await this.save();
+    return n;
+  }
 }

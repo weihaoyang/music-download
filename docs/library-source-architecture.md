@@ -212,4 +212,6 @@ GET /api/track/:id/stream
 
 **前端（已做）**：搜索页可切 QQ/网易云并一键「+ 加入曲库」；「导入来源」页含 QQ/网易云/本地文件夹/直链/网盘 五种入口；曲目行显示**来源 chip**；设置里可填 `neteaseCookie`/`baiduCookie`。
 
-**尚未做**：百度网盘分享链路的实机验证（需 BDUSS Cookie）；DB 从 `library.json` 升级为 `Track+Asset` 的正式迁移（现以 `source`/`url` 字段轻量承载）。
+**模型（已升级 schema v2）**：曲库存储由 `data/library.json` 迁移为 **`data/tracks.json`**（`{schemaVersion:2, collections}`）；每首 Track 含 `provenance`（`rights: external|club`、`edited`、`origin` 溯源）与 `assets[]` + `primaryAssetId`，并与原扁平字段并存以兼容。归属/是否编辑过可在编辑弹窗修改。
+
+**尚未做**：百度网盘分享链路的实机验证（需 BDUSS Cookie）；`/api/library/import` 老接口的收编（QQ 歌单已可用通用 `/api/source/qqmusic/import`）。

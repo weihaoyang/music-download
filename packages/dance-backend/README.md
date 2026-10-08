@@ -67,7 +67,7 @@ node scripts/smoke.js   # 冒烟
 | POST | `/api/library/download` | 补齐缺失音频 `{type?, source?}` → `taskId` | admin |
 | POST | `/api/library/classify` | 自动识别舞种（只处理已缓存音频，跳过人工类型）→ `taskId` | admin |
 | POST | `/api/library/cache-classify` | 批量「缓存 + 分类」：未缓存的先下载 HQ 再识别 → `taskId` | admin |
-| PUT | `/api/library/song` | 改 `name/artists/album/type/suitable/warning` | admin |
+| PUT | `/api/library/song` | 改 `name/artists/album/type/suitable/warning/rights/edited` | admin |
 | DELETE | `/api/library/song?mid=` | 从曲库移除（不删磁盘音频） | admin |
 | POST | `/api/library/delete-by-source` | 清空某来源 `{source, purgeFiles?}`（本地文件不删） | admin |
 | POST | `/api/library/calibrate` | 按文件名校准舞种（见下） | admin |
@@ -120,7 +120,7 @@ const poll = setInterval(async () => {
 
 ## 数据文件
 
-- `data/library.json`：默认曲库
+- `data/tracks.json`：默认曲库（schema v2：`{schemaVersion:2, collections}`；每首含 `provenance`/`assets`；首次启动自动从旧 `library.json` 迁移）
 - `data/media/`：**本地音频缓存**（`<songmid>.mp3` 等）
 - `data/sessions.json`：用户登录态（含 cookie，注意权限，**勿入库/勿外泄**）
 

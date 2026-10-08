@@ -288,21 +288,23 @@ export function classify(
   mood: Mood = '中',
 ): { type: string | null; confidence: number } {
   if (!bpm || bpm <= 0) return { type: null, confidence: 0 };
-  const score = (t: DanceType, inRange: boolean): number => {
-    const half = Math.max(1, (t.max - t.min) / 2);
-    const base = Math.max(0, 1 - Math.abs(bpm - t.center) / (half * 1.6));
-    let s = base + (inRange ? 0.25 : 0) + 0.5 * moodMatch(mood, t.mood);
-    if (meter === t.meter) s += 0.1;
+  // 以「到各舞种中心值的距离（BPM 单位）」为主项；命中区间大幅优先；
+  // 曲风/拍号只做约 ±3BPM 的微调 —— 避免 BPM 落在所有区间之外时被曲风带偏。
+  const score = (t: DanceType): number => {
+    const inR = bpm >= t.min && bpm <= t.max;
+    let s = -Math.abs(bpm - t.center);
+    if (inR) s += 20;
+    s += 3 * moodMatch(mood, t.mood);
+    if (meter === t.meter) s += 1.5;
     return s;
   };
   const inRange = DANCE_TYPES.filter((t) => bpm >= t.min && bpm <= t.max);
   const pool = inRange.length ? inRange : DANCE_TYPES;
-  const best = pool.reduce((a, b) => (score(b, inRange.length > 0) > score(a, inRange.length > 0) ? b : a));
+  const best = pool.reduce((a, b) => (score(b) > score(a) ? b : a));
 
   const half = Math.max(1, (best.max - best.min) / 2);
   let confidence = Math.max(0.05, Math.min(1, 1 - Math.abs(bpm - best.center) / (half * 1.6)));
-  const mm = moodMatch(mood, best.mood);
-  confidence *= 0.75 + 0.25 * mm; // 曲风不符时降信度
+  confidence *= 0.75 + 0.25 * moodMatch(mood, best.mood); // 曲风不符时降信度
   if (meter !== best.meter) confidence *= 0.9;
   return { type: best.type, confidence: Math.round(confidence * 100) / 100 };
 }

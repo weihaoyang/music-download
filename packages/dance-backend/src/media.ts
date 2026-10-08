@@ -10,6 +10,7 @@ const ffprobePath = process.env.MF_FFPROBE || 'ffprobe';
 export class MediaCache {
   private active = 0;
   private queue: Array<() => Promise<void>> = [];
+  private readonly inflight = new Map<string, Promise<string>>();
 
   constructor(
     private readonly dir: string,
@@ -86,8 +87,17 @@ export class MediaCache {
     }
   }
 
+  /** 同一 mid 的并发下载合并为一个（避免同一临时文件互相覆盖） */
+  ensure(client: QQMusicClient, mid: string): Promise<string> {
+    const existing = this.inflight.get(mid);
+    if (existing) return existing;
+    const p = this.doEnsure(client, mid).finally(() => this.inflight.delete(mid));
+    this.inflight.set(mid, p);
+    return p;
+  }
+
   /** 确保本地有该歌曲的音频（统一 mp3），返回文件名（失败抛错） */
-  async ensure(client: QQMusicClient, mid: string): Promise<string> {
+  private async doEnsure(client: QQMusicClient, mid: string): Promise<string> {
     const file = this.fileFor(mid);
     if (await this.exists(file)) return file;
     const dest = this.absPath(file);

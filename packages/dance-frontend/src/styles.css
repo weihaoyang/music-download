@@ -696,6 +696,28 @@ body {
   font-variant-numeric: tabular-nums;
   opacity: 0.7;
 }
+.wall-top-right {
+  display: flex;
+  align-items: center;
+  gap: 1.2vw;
+}
+.wall-exit {
+  font-family: var(--sans);
+  font-size: 0.9vw;
+  letter-spacing: 0.15em;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(197, 160, 89, 0.5);
+  border-radius: 999px;
+  padding: 0.45em 1.1em;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.2s, background 0.2s;
+}
+.wall-exit:hover {
+  opacity: 1;
+  background: #fff;
+}
 .wall-main {
   position: relative;
   flex: 1;

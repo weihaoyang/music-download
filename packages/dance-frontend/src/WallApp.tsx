@@ -125,6 +125,9 @@ export default function WallApp() {
       } else if (e.code === 'ArrowRight') goTo(idx + 1);
       else if (e.code === 'ArrowLeft') goTo(idx - 1);
       else if (e.key === 'f' || e.key === 'F') fullscreen();
+      else if (e.key === 'Escape') {
+        if (!document.fullscreenElement) exitWall();
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -176,6 +179,16 @@ export default function WallApp() {
     if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
     else document.exitFullscreen?.();
   }
+  /** 退出大屏：停播 + 退全屏 + 回控制台 */
+  function exitWall() {
+    try {
+      soundRef.current?.stop();
+    } catch {
+      /* ignore */
+    }
+    if (document.fullscreenElement) void document.exitFullscreen?.();
+    window.location.href = '/';
+  }
 
   const pct = dur > 0 ? Math.min(100, (pos / dur) * 100) : 0;
   const curLine = [...lrc].reverse().find((l) => l.t <= pos + 0.15);
@@ -206,7 +219,12 @@ export default function WallApp() {
 
       <header className="wall-top">
         <span className="wall-brand">舞曲排曲台</span>
-        <span className="wall-clock">{clock}</span>
+        <div className="wall-top-right">
+          <button className="wall-exit" onClick={exitWall} title="返回控制台">
+            ← 返回控制台
+          </button>
+          <span className="wall-clock">{clock}</span>
+        </div>
       </header>
 
       <main className="wall-main" ref={stageRef}>
@@ -269,7 +287,7 @@ export default function WallApp() {
         </button>
       </div>
 
-      <div className="wall-hint">空格 播放/暂停 · ← → 切歌（自动淡入淡出）· F 全屏</div>
+      <div className="wall-hint">空格 播放/暂停 · ← → 切歌（自动淡入淡出）· F 全屏 · Esc/返回 退出</div>
     </div>
   );
 }

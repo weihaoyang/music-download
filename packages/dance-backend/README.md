@@ -64,11 +64,12 @@ node scripts/smoke.js   # 冒烟
 | POST | `/api/playlist/resolve` | 分享链接/ID → disstid | — |
 | GET | `/api/playlist/import?url=&limit=` | 拉取外部歌单（归一化歌曲） | 客户端镜像 |
 | POST | `/api/playlist/clone` | 克隆外部歌单到我的歌单 | 用户 |
-| POST | `/api/library/download` | 补齐某舞种/全部缺失音频 → `taskId` | admin |
+| POST | `/api/library/download` | 补齐缺失音频 `{type?, source?}` → `taskId` | admin |
 | POST | `/api/library/classify` | 自动识别舞种（只处理已缓存音频，跳过人工类型）→ `taskId` | admin |
 | POST | `/api/library/cache-classify` | 批量「缓存 + 分类」：未缓存的先下载 HQ 再识别 → `taskId` | admin |
 | PUT | `/api/library/song` | 改 `name/artists/album/type/suitable/warning` | admin |
 | DELETE | `/api/library/song?mid=` | 从曲库移除（不删磁盘音频） | admin |
+| POST | `/api/library/delete-by-source` | 清空某来源 `{source, purgeFiles?}`（本地文件不删） | admin |
 | POST | `/api/library/calibrate` | 按文件名校准舞种（见下） | admin |
 | POST | `/api/library/import-liked` | 导入「我喜欢」(dirid=201) 到某舞种（默认只导元数据，不下载） | admin |
 | GET | `/api/sources` | 可用下载来源与登录状态（来自来源注册表） | — |

@@ -208,6 +208,8 @@ GET /api/track/:id/stream
 
 **登录/Cookie（`PUT /api/settings`）**：`neteaseCookie`（MUSIC_U）、`baiduCookie`（BDUSS;STOKEN）。
 
+**来源注册表（已实现）**：`packages/dance-backend/src/sources/registry.ts` 定义统一 `SourceDef`（`id/label/kind/authed/search/build/streamUrl`）；`GET /api/sources` 由注册表驱动；导入/搜索走通用路由 **`POST /api/source/:id/import`** 与 **`GET /api/source/:id/search`**；播放直链走各来源的 `streamUrl`（QQ/本地由后端其它逻辑处理）。新增来源 = 在注册表加一个 `SourceDef`，核心无需改动。
+
 **前端（已做）**：搜索页可切 QQ/网易云并一键「+ 加入曲库」；「导入来源」页含 QQ/网易云/本地文件夹/直链/网盘 五种入口；曲目行显示**来源 chip**；设置里可填 `neteaseCookie`/`baiduCookie`。
 
 **尚未做**：百度网盘分享链路的实机验证（需 BDUSS Cookie）；DB 从 `library.json` 升级为 `Track+Asset` 的正式迁移（现以 `source`/`url` 字段轻量承载）。

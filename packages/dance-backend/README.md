@@ -71,6 +71,9 @@ node scripts/smoke.js   # 冒烟
 | DELETE | `/api/library/song?mid=` | 从曲库移除（不删磁盘音频） | admin |
 | POST | `/api/library/calibrate` | 按文件名校准舞种（见下） | admin |
 | POST | `/api/library/import-liked` | 导入「我喜欢」(dirid=201) 到某舞种（默认只导元数据，不下载） | admin |
+| GET | `/api/sources` | 可用下载来源与登录状态（来自来源注册表） | — |
+| GET | `/api/source/:id/search?keywords=&type=song\|playlist` | 来源搜索（如 `netease`） | — |
+| POST | `/api/source/:id/import` | 来源通用导入（`qqmusic`/`netease`/`local`/`http`/`pan`），`{type,download?,...}` | admin |
 | POST | `/api/library/scan` | 重新扫描缓存目录，校正 `file` 标记（换目录/手工删文件后） | admin |
 | GET | `/api/tasks/:id` | 任务进度（下载/分类） | — |
 

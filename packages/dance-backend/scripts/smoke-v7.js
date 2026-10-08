@@ -31,7 +31,7 @@ async function findMid(mid, types) {
   ok('sources 5 项', ids.length === 5 && ['qqmusic', 'netease', 'local', 'http', 'pan'].every((x) => ids.includes(x)), ids);
 
   console.log('== 2. 网易云搜索 ==');
-  const nes = await j('/api/search/netease?keywords=' + encodeURIComponent('晴天') + '&limit=3');
+  const nes = await j('/api/source/netease/search?type=song&keywords=' + encodeURIComponent('晴天') + '&limit=3');
   ok('netease search', (nes.body.items || []).length > 0, nes.body.items && nes.body.items[0] && nes.body.items[0].name);
 
   console.log('== 3. 网易云单曲导入 + 清理 ==');
@@ -83,7 +83,7 @@ async function findMid(mid, types) {
 
   console.log('== 7. 网盘（无 Cookie 时应报错）==');
   const pan = await j('/api/source/pan/import', { method: 'POST', headers: H, body: JSON.stringify({ type: '未分类', shareUrl: 'https://pan.baidu.com/s/1abcdEFG' }) });
-  ok('pan 需 Cookie（或成功）', pan.body.ok === true || pan.body.error === 'PAN_ERROR', { ok: pan.body.ok, error: pan.body.error });
+  ok('pan 需 Cookie（或成功）', pan.body.ok === true || pan.body.error === 'SOURCE_ERROR' || pan.body.error === 'PAN_ERROR', { ok: pan.body.ok, error: pan.body.error });
 
   console.log('\n==== v7 结果：PASS ' + pass + ' / FAIL ' + fail + ' ====');
   process.exit(fail ? 1 : 0);

@@ -16,6 +16,7 @@ import { SettingsStore } from './settings';
 import { analyze } from './classifier';
 import * as netease from './sources/netease';
 import * as pan from './sources/pan';
+import { createSourceRegistry, type Draft } from './sources/registry';
 import { scanDanceDir, parseDanceFileName, coreName, localMid } from './localscan';
 import { sendJson, readBody, parseCookies, setCookie, clearCookie } from './http';
 
@@ -82,6 +83,7 @@ export function createServer(cfg: BackendConfig) {
   const settings = new SettingsStore(path.join(cfg.dataDir, 'settings.json'));
   const tasks = new TaskStore();
   const pool = new ClientPool(cfg.bridgeUrl, cfg.logger);
+  const sources = createSourceRegistry({ pool });
 
   function eff() {
     const s = settings.get();
@@ -186,15 +188,10 @@ export function createServer(cfg: BackendConfig) {
     return task.id;
   }
 
-  /** 外部来源（网易云/直链/网盘）解析出可播放直链 */
+  /** 外部来源（注册表）解析出可播放直链；返回 null 表示该来源由其它逻辑处理 */
   async function resolveExternalUrl(hit: { song: { source?: string; mid: string; url?: string | null } }): Promise<string | null> {
-    const src = hit.song.source;
-    if (src === 'http') return hit.song.url || null;
-    if (src === 'netease') return netease.songUrl(hit.song.mid);
-    if (src === 'pan') {
-      const ref = pan.decodeRef(hit.song.url || '');
-      return ref ? pan.resolveDlink(ref) : null;
-    }
+    const def = sources.get(hit.song.source || 'qqmusic');
+    if (def?.streamUrl) return def.streamUrl(hit.song);
     return null;
   }
 
@@ -630,168 +627,79 @@ export function createServer(cfg: BackendConfig) {
       const page = await client.search.playlists({ keyword: url.searchParams.get('keywords') || '', limit: Number(url.searchParams.get('limit') || 20) });
       return sendJson(res, 200, { ok: true, ...page });
     }
-    // 网易云搜索（来源适配器）
-    if (p === '/api/search/netease' && method === 'GET') {
-      const kw = url.searchParams.get('keywords') || '';
-      const kind = url.searchParams.get('type') || 'song';
-      const limit = Number(url.searchParams.get('limit') || 20);
-      if (kind === 'playlist') return sendJson(res, 200, { ok: true, kind, items: await netease.searchPlaylists(kw, limit) });
-      return sendJson(res, 200, { ok: true, kind: 'song', items: await netease.searchSongs(kw, limit) });
-    }
-    // 可用下载来源与登录状态
+    // 可用下载来源（来源注册表）
     if (p === '/api/sources' && method === 'GET') {
       return sendJson(res, 200, {
         ok: true,
-        data: [
-          { id: 'qqmusic', label: 'QQ音乐', kind: 'online', auth: true },
-          { id: 'netease', label: '网易云音乐', kind: 'online', auth: netease.hasNeteaseCookie() },
-          { id: 'local', label: '本地/社团文件夹', kind: 'local', auth: true },
-          { id: 'http', label: '自建服务器直链', kind: 'online', auth: true },
-          { id: 'pan', label: '百度网盘', kind: 'online', auth: pan.hasBaiduCookie() },
-        ],
+        data: [...sources.values()].map((d) => ({ id: d.id, label: d.label, kind: d.kind, auth: d.authed(), search: !!d.search })),
       });
     }
-    // 从网易云导入（歌单 / 单曲）到指定舞种
-    if (p === '/api/source/netease/import' && method === 'POST') {
-      if (!isAdmin) return sendJson(res, 403, { ok: false, error: 'forbidden' });
-      const body = await readBody(req);
-      const type = String(body.type || '未分类');
-      const input = String(body.input || '');
-      const limit = Number(body.limit ?? 1000);
-      const parsed = netease.extractNeId(input);
-      if (!parsed) return sendJson(res, 400, { ok: false, error: '无法解析网易云链接/ID' });
-      let items: netease.NeSong[] = [];
-      let name = '';
-      if (parsed.kind === 'playlist') {
-        const d = await netease.playlistDetail(parsed.id, limit);
-        items = d.songs;
-        name = d.name;
-      } else {
-        const d = await netease.songDetail([parsed.id]);
-        items = d;
-        name = d[0]?.name ?? '';
+    // 来源通用搜索：GET /api/source/:id/search?keywords=&type=song|playlist&limit=
+    {
+      const m = p.match(/^\/api\/source\/([^/]+)\/search$/);
+      if (m && method === 'GET') {
+        const def = sources.get(m[1]);
+        if (!def) return sendJson(res, 404, { ok: false, error: 'unknown source' });
+        if (!def.search) return sendJson(res, 400, { ok: false, error: '该来源不支持搜索' });
+        const kw = url.searchParams.get('keywords') || '';
+        const kind = url.searchParams.get('type') || 'song';
+        const limit = Number(url.searchParams.get('limit') || 20);
+        return sendJson(res, 200, { ok: true, kind, items: await def.search(kw, kind, limit) });
       }
-      const r = await library.addExternalSongs(
-        type,
-        items.map((s) => ({ id: s.id, name: s.name, artists: s.artists, album: s.album, durationMs: s.durationMs, coverUrl: s.coverUrl })),
-        'netease',
-      );
-      const taskId = body.download ? await queueDownloads(r.newMids, type) : undefined;
-      return sendJson(res, 200, { ok: true, source: 'netease', type, name, added: r.added, skipped: r.skipped, queued: body.download ? r.newMids.length : 0, taskId });
     }
-    // 本地 / 社团文件夹来源：按《规则》文件名「舞种-歌名-歌手」扫描入库（文件保持原位）
-    if (p === '/api/source/local/import' && method === 'POST') {
-      if (!isAdmin) return sendJson(res, 403, { ok: false, error: 'forbidden' });
-      const body = await readBody(req);
-      const dir = String(body.dir || '');
-      if (!dir) return sendJson(res, 400, { ok: false, error: 'dir required' });
-      let scanned: Awaited<ReturnType<typeof scanDanceDir>>;
-      try {
-        scanned = await scanDanceDir(path.resolve(dir), !!body.recursive);
-      } catch (e) {
-        return sendJson(res, 400, { ok: false, error: '无法读取目录：' + (e as Error).message });
-      }
-      let added = 0;
-      let skipped = 0;
-      for (const f of scanned.files) {
-        const type = f.type || String(body.type || '未分类');
-        const mid = localMid(f.file);
-        const isNew = await library.addLocalSong(type, { mid, name: f.name, artists: f.artists, durationMs: f.durationMs ?? 0, file: f.file });
-        if (isNew) added++;
-        else skipped++;
-      }
-      return sendJson(res, 200, { ok: true, source: 'local', dir: path.resolve(dir), audio: scanned.audio, scanned: scanned.files.length, added, skipped, unparsed: scanned.unparsed.length });
-    }
-    // 自建服务器直链来源：按 URL 列表入库（播放/缓存走直链）
-    if (p === '/api/source/http/import' && method === 'POST') {
-      if (!isAdmin) return sendJson(res, 403, { ok: false, error: 'forbidden' });
-      const body = await readBody(req);
-      const type = String(body.type || '未分类');
-      const urls: string[] = Array.isArray(body.urls) ? (body.urls as unknown[]).map(String) : body.url ? [String(body.url)] : [];
-      if (!urls.length) return sendJson(res, 400, { ok: false, error: 'urls required' });
-      const groups = new Map<string, Array<{ id: string; name: string; artists: string[]; album: string | null; durationMs: number; coverUrl: string | null; url: string }>>();
-      for (const u of urls) {
-        let base = '';
+    // 来源通用导入：POST /api/source/:id/import  { type, download?, ...来源参数 }
+    {
+      const m = p.match(/^\/api\/source\/([^/]+)\/import$/);
+      if (m && method === 'POST') {
+        if (!isAdmin) return sendJson(res, 403, { ok: false, error: 'forbidden' });
+        const def = sources.get(m[1]);
+        if (!def) return sendJson(res, 404, { ok: false, error: 'unknown source' });
+        const body = await readBody(req);
+        const defaultType = String(body.type || '未分类');
+        let built: { name?: string; drafts: Draft[]; note?: string };
         try {
-          base = decodeURIComponent(new URL(u).pathname.split('/').pop() || '');
-        } catch {
-          base = u.split('/').pop() || u;
-        }
-        const parsed = parseDanceFileName(base);
-        const ty = parsed?.type || type;
-        const item = {
-          id: 'http:' + crypto.createHash('md5').update(u).digest('hex').slice(0, 12),
-          name: parsed?.name || base.replace(/\.[^.]+$/, ''),
-          artists: parsed?.artists ?? [],
-          album: null,
-          durationMs: parsed?.durationMs ?? 0,
-          coverUrl: null,
-          url: u,
-        };
-        const arr = groups.get(ty) ?? [];
-        arr.push(item);
-        groups.set(ty, arr);
-      }
-      let added = 0;
-      let skipped = 0;
-      for (const [ty, list] of groups) {
-        const r = await library.addExternalSongs(ty, list, 'http');
-        added += r.added;
-        skipped += r.skipped;
-      }
-      return sendJson(res, 200, { ok: true, source: 'http', added, skipped });
-    }
-    // 百度网盘来源：解析分享链接 → 列音频 → 入库（播放时再解析 dlink）
-    if (p === '/api/source/pan/import' && method === 'POST') {
-      if (!isAdmin) return sendJson(res, 403, { ok: false, error: 'forbidden' });
-      const body = await readBody(req);
-      const type = String(body.type || '未分类');
-      const shareUrl = String(body.shareUrl || '');
-      const pwd = body.pwd ? String(body.pwd) : undefined;
-      if (!shareUrl) return sendJson(res, 400, { ok: false, error: 'shareUrl required' });
-      try {
-        const { items, ref } = await pan.listShareAudio(shareUrl, pwd);
-        const byType = new Map<string, Array<{ id: string; name: string; artists: string[]; album: string | null; durationMs: number; coverUrl: string | null; url: string }>>();
-        for (const it of items) {
-          const parsed = parseDanceFileName(it.name);
-          const ty = parsed?.type || type;
-          const item = {
-            id: 'pan:' + it.fsId,
-            name: parsed?.name || it.name.replace(/\.[^.]+$/, ''),
-            artists: parsed?.artists ?? [],
-            album: null,
-            durationMs: parsed?.durationMs ?? 0,
-            coverUrl: null,
-            url: pan.encodeRef(ref, it),
-          };
-          const arr = byType.get(ty) ?? [];
-          arr.push(item);
-          byType.set(ty, arr);
+          built = await def.build(body);
+        } catch (e) {
+          return sendJson(res, 502, { ok: false, error: 'SOURCE_ERROR', message: (e as Error).message });
         }
         let added = 0;
         let skipped = 0;
-        for (const [ty, list] of byType) {
-          const r = await library.addExternalSongs(ty, list, 'pan');
-          added += r.added;
-          skipped += r.skipped;
+        const newMids: string[] = [];
+        const byType = new Map<string, Draft[]>();
+        for (const d of built.drafts) {
+          const ty = d.type || defaultType;
+          const arr = byType.get(ty) ?? [];
+          arr.push(d);
+          byType.set(ty, arr);
         }
-        return sendJson(res, 200, { ok: true, source: 'pan', shareUrl, total: items.length, added, skipped });
-      } catch (e) {
-        return sendJson(res, 502, { ok: false, error: 'PAN_ERROR', message: (e as Error).message });
+        for (const [ty, list] of byType) {
+          for (const d of list) {
+            if (d.local && d.file) {
+              const isNew = await library.addLocalSong(ty, { mid: d.id, name: d.name, artists: d.artists ?? [], durationMs: d.durationMs ?? 0, file: d.file });
+              if (isNew) {
+                added++;
+                newMids.push(d.id);
+              } else skipped++;
+            }
+          }
+          const externals = list.filter((d) => !(d.local && d.file));
+          if (externals.length) {
+            const r = await library.addExternalSongs(
+              ty,
+              externals.map((d) => ({ id: d.id, name: d.name, artists: d.artists, album: d.album, durationMs: d.durationMs, coverUrl: d.coverUrl, url: d.url })),
+              def.id,
+            );
+            added += r.added;
+            skipped += r.skipped;
+            newMids.push(...r.newMids);
+          }
+        }
+        const download = !!body.download;
+        const taskId = download && newMids.length ? await queueDownloads(newMids, defaultType) : undefined;
+        return sendJson(res, 200, { ok: true, source: def.id, name: built.name, note: built.note, total: built.drafts.length, added, skipped, queued: download ? newMids.length : 0, taskId });
       }
     }
-    // QQ 音乐：单曲入库
-    if (p === '/api/source/qqmusic/import' && method === 'POST') {
-      if (!isAdmin) return sendJson(res, 403, { ok: false, error: 'forbidden' });
-      const body = await readBody(req);
-      const type = String(body.type || '未分类');
-      const songMid = String(body.songMid || body.mid || '');
-      if (!songMid) return sendJson(res, 400, { ok: false, error: 'songMid required' });
-      const client = await pool.anonymous();
-      const song = await client.songs.detail({ songmid: songMid });
-      const r = await library.addSongs(type, [song]);
-      return sendJson(res, 200, { ok: true, source: 'qqmusic', type, name: song.name, added: r.added, skipped: r.skipped });
-    }
+    /* 各来源导入已收敛到上面的 /api/source/:id/import 通用路由 */
 
     /* -------------------------------- 歌曲 -------------------------------- */
     if (p === '/api/song/detail' && method === 'GET') {

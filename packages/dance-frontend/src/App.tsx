@@ -415,7 +415,7 @@ export default function App() {
     setLoadingSearch(true);
     const path =
       searchSource === 'netease'
-        ? '/api/search/netease?keywords=' + encodeURIComponent(kw) + '&limit=30'
+        ? '/api/source/netease/search?type=song&keywords=' + encodeURIComponent(kw) + '&limit=30'
         : '/api/search?keywords=' + encodeURIComponent(kw);
     api<{ items: Array<Record<string, unknown>> }>(path)
       .then((r) => {

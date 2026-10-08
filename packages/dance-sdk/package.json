@@ -1,0 +1,28 @@
+{
+  "name": "@hdbc/dance-sdk",
+  "version": "0.1.0",
+  "description": "舞曲工作台核心 SDK：舞种自动识别（ffmpeg + aubio）与多来源导入/下载（QQ音乐 / 网易云 / 本地文件夹 / 直链）",
+  "license": "GPL-3.0-or-later",
+  "author": "weihaoyang",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@hdbc/qqmusic-sdk": "file:../qqmusic-sdk",
+    "aubiojs": "^0.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "typescript": "^7.0.2"
+  }
+}

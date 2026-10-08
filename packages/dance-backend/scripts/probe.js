@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { analyze } = require('../dist/classifier');
+const { analyze } = require('@hdbc/dance-sdk');
 
 (async () => {
   const dir = process.argv[2];

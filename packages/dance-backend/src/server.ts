@@ -9,14 +9,10 @@ import { ROOT, type BackendConfig } from './config';
 import { SessionStore } from './session';
 import { LibraryStore } from './library';
 import { ClientPool } from './clients';
-import { MediaCache } from './media';
 import { TaskStore } from './tasks';
 import { SetlistStore, generateSetlist, type EventMeta } from './setlist';
 import { SettingsStore } from './settings';
-import { analyze } from './classifier';
-import * as netease from './sources/netease';
-import { createSourceRegistry, type Draft } from './sources/registry';
-import { scanDanceDir, parseDanceFileName, coreName, localMid } from './localscan';
+import { analyze, MediaCache, createSourceRegistry, scanDanceDir, coreName, localMid, netease, type TrackMeta } from '@hdbc/dance-sdk';
 import { sendJson, readBody, parseCookies, setCookie, clearCookie } from './http';
 
 const MIME: Record<string, string> = {
@@ -82,7 +78,7 @@ export function createServer(cfg: BackendConfig) {
   const settings = new SettingsStore(path.join(cfg.dataDir, 'settings.json'));
   const tasks = new TaskStore();
   const pool = new ClientPool(cfg.bridgeUrl, cfg.logger);
-  const sources = createSourceRegistry({ pool });
+  const sources = createSourceRegistry({ qqAnonymous: () => pool.anonymous(), qqLibrary: () => pool.libraryClient() });
 
   function eff() {
     const s = settings.get();
@@ -676,7 +672,7 @@ export function createServer(cfg: BackendConfig) {
         if (!def) return sendJson(res, 404, { ok: false, error: 'unknown source' });
         const body = await readBody(req);
         const defaultType = String(body.type || '未分类');
-        let built: { name?: string; drafts: Draft[]; note?: string };
+        let built: { name?: string; tracks: TrackMeta[]; note?: string };
         try {
           built = await def.build(body);
         } catch (e) {
@@ -685,8 +681,8 @@ export function createServer(cfg: BackendConfig) {
         let added = 0;
         let skipped = 0;
         const newMids: string[] = [];
-        const byType = new Map<string, Draft[]>();
-        for (const d of built.drafts) {
+        const byType = new Map<string, TrackMeta[]>();
+        for (const d of built.tracks) {
           const ty = d.type || defaultType;
           const arr = byType.get(ty) ?? [];
           arr.push(d);
@@ -716,7 +712,7 @@ export function createServer(cfg: BackendConfig) {
         }
         const download = !!body.download;
         const taskId = download && newMids.length ? await queueDownloads(newMids, defaultType) : undefined;
-        return sendJson(res, 200, { ok: true, source: def.id, name: built.name, note: built.note, total: built.drafts.length, added, skipped, queued: download ? newMids.length : 0, taskId });
+        return sendJson(res, 200, { ok: true, source: def.id, name: built.name, note: built.note, total: built.tracks.length, added, skipped, queued: download ? newMids.length : 0, taskId });
       }
     }
     /* 各来源导入已收敛到上面的 /api/source/:id/import 通用路由 */

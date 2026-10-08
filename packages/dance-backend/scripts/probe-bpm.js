@@ -1,5 +1,5 @@
 'use strict';
-const { debugBpm } = require('../dist/classifier');
+const { debugBpm } = require('@hdbc/dance-sdk');
 const { spawn } = require('child_process');
 const SAMPLE_RATE = 22050;
 const BUF = 1024;

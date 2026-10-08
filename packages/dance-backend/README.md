@@ -1,6 +1,6 @@
 # dance-backend —— 排曲网站数据后端
 
-把 `@hdbc/qqmusic-sdk` 拼成一个可直接给排曲网站用的数据后端：
+把 `@hdbc/qqmusic-sdk` 与 `@hdbc/dance-sdk`（舞种识别 + 多来源导入 + 缓存）拼成一个可直接给排曲网站用的数据后端：
 
 - **默认曲库缓存**（按舞种）→ 浏览/编排零外部依赖
 - **搜索 / 详情 / 播放直链**（匿名 + 客户端镜像的会员账号）
@@ -11,7 +11,8 @@
 ## 前置
 
 1. `packages/qqmusic-sdk` 已构建：`cd ../qqmusic-sdk && npm install && npm run build`
-2. （推荐）`tools/qqclient-bridge` 正在运行：服务器用**会员账号**登录 QQ 客户端并跑 `python bridge.py`，
+2. `packages/dance-sdk` 已构建：`cd ../dance-sdk && npm install && npm run build`（舞种识别 + 多来源导入 + 缓存）
+3. （推荐）`tools/qqclient-bridge` 正在运行：服务器用**会员账号**登录 QQ 客户端并跑 `python bridge.py`，
    提供**不会过期**的播放/导入凭证。
 
 ## 配置
@@ -195,7 +196,7 @@ node scripts/build-library.js --type=慢三             # 只构建某舞种
 
 ## 自动舞种分类 + 排曲编辑
 
-- **自动舞种分类**：`POST /api/library/classify`（admin）`{type?}`；依据《HBDC 舞曲及排曲规则 20210508》表3：ffmpeg 解码 → 开源 **aubio**（WASM 版 `aubiojs`）测 BPM → 按文档换算的 BPM 区间映射到 **慢三 / 平四 / 伦巴 / 并四 / 快三 / 慢四 / 吉特巴**（华尔兹/探戈/狐步/快步先不做）。**曲风（能量）**（欢快/舒缓/干净利索）用于纠正 aubio 半速八度误差与边界破同分。逐首回写 `type / bpm / meter / confidence / energy / mood / stability / suitable / warning`；节奏不稳的标记 `suitable=false` + `warning`（前端显示「不适合舞曲」，可在编辑里手动改）。只处理 7 个可分类舞种，跳过「集体舞」等人工类型；返回 `taskId` 用 `/api/tasks/:id` 看进度。
+- **自动舞种分类**：`POST /api/library/classify`（admin）`{type?}`；核心算法在 **`@hdbc/dance-sdk`**（`analyze`/`classify`）：依据《HBDC 舞曲及排曲规则 20210508》表3：ffmpeg 解码 → 开源 **aubio**（WASM 版 `aubiojs`）测 BPM → 按文档换算的 BPM 区间映射到 **慢三 / 平四 / 伦巴 / 并四 / 快三 / 慢四 / 吉特巴**（华尔兹/探戈/狐步/快步先不做）。**曲风（能量）**（欢快/舒缓/干净利索）用于纠正 aubio 半速八度误差与边界破同分。逐首回写 `type / bpm / meter / confidence / energy / mood / stability / suitable / warning`；节奏不稳的标记 `suitable=false` + `warning`（前端显示「不适合舞曲」，可在编辑里手动改）。只处理可分类舞种，跳过「集体舞」等人工类型；返回 `taskId` 用 `/api/tasks/:id` 看进度。
 - **按文件名校准**：`POST /api/library/calibrate`（admin）`{dir?, recursive?, addMissing?, dryRun?, entries?}`。解析《规则表1》命名 `舞种-歌曲名-歌手[-时长]`（支持全/半角连字符、下划线、多歌手），按归一化歌名+歌手匹配默认曲库并改舞种（`confidence=1`）；`addMissing` 时把未匹配的作为**本地文件**加入曲库（绝对路径，`/api/song/stream` 直接串流、支持 Range）。返回 `{scanned,audio,matched,updated,unchanged,added,unmatched,unparsed}`。
 - **删除歌曲**：`DELETE /api/library/song?mid=`（admin）—— 只移除曲库记录，**不动磁盘音频文件**。
 - **排曲编辑**：`POST /api/setlist` 接受 `{name, songs:[{mid, playMs?}], event:{name,time,location,host,note}}`；`playMs` 为**裁剪播放时长**（毫秒），`totalMs` 按裁剪后计算。

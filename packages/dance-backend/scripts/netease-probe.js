@@ -1,6 +1,6 @@
 'use strict';
 // 网易云来源适配器 实网探针：搜索 / 详情 / 直链 / 歌词 / 歌单
-const ne = require('../dist/sources/netease');
+const ne = require('@hdbc/dance-sdk').netease;
 
 (async () => {
   console.log('== search 歌曲「晴天」==');

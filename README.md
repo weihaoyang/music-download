@@ -12,6 +12,7 @@
 | 目录 | 说明 | 文档 |
 |---|---|---|
 | `packages/qqmusic-sdk` | QQ 音乐数据 SDK（搜索/详情/直链/歌单/我喜欢/扫码登录/续期），TypeScript | [README](packages/qqmusic-sdk/README.md) · [CONTRACT](packages/qqmusic-sdk/CONTRACT.md) |
+| `packages/dance-sdk` | 舞曲工作台核心 SDK：**舞种自动识别** + **多来源导入/下载**（QQ/网易云/本地/直链·整库清单）+ 本地缓存转 mp3 | [README](packages/dance-sdk/README.md) |
 | `packages/dance-backend` | Node/TS 数据后端（曲库、导入、分类、缓存、排曲、任务） | [README](packages/dance-backend/README.md) |
 | `packages/dance-frontend` | Vite + React + Semi 前端（控制台 `/`、播放 `/play`、大屏 `/wall`） | [README](packages/dance-frontend/README.md) |
 | `tools/qqclient-bridge` | Frida 客户端镜像：从运行中的 QQ 音乐客户端取 live cookie（会员账号、不过期） | [README](tools/qqclient-bridge/README.md) |

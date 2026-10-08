@@ -74,7 +74,7 @@ async function findMid(mid, types) {
 
   console.log('== 6. 直链导入 + 清理 ==');
   let url = null;
-  try { url = await require('../dist/sources/netease').songUrl('2652820720'); } catch { /* ignore */ }
+  try { url = await require('@hdbc/dance-sdk').netease.songUrl('2652820720'); } catch { /* ignore */ }
   if (url) {
     const ht = await j('/api/source/http/import', { method: 'POST', headers: H, body: JSON.stringify({ type: '未分类', urls: [url] }) });
     ok('http import', ht.body.ok === true && ht.body.added === 1, { added: ht.body.added });
@@ -89,13 +89,18 @@ async function findMid(mid, types) {
 
   console.log('== 7. 按来源批量操作 ==');
   let url8 = null;
-  try { url8 = await require('../dist/sources/netease').songUrl('2652820720'); } catch { /* ignore */ }
+  try { url8 = await require('@hdbc/dance-sdk').netease.songUrl('2652820720'); } catch { /* ignore */ }
   if (url8) await j('/api/source/http/import', { method: 'POST', headers: H, body: JSON.stringify({ type: '未分类', urls: [url8] }) });
   const dl = await j('/api/library/download', { method: 'POST', headers: H, body: JSON.stringify({ type: '', source: 'http' }) });
   ok('按来源批量缓存', dl.body.ok === true, { queued: dl.body.queued });
   await new Promise((r) => setTimeout(r, 1500));
   const dbs = await j('/api/library/delete-by-source', { method: 'POST', headers: H, body: JSON.stringify({ source: 'http', purgeFiles: true }) });
   ok('按来源清空', dbs.body.ok === true && dbs.body.removed >= 0, { removed: dbs.body.removed, purged: dbs.body.purged });
+
+  console.log('== 9. 自建服务器整库清单(manifest) ==');
+  const mf = await j('/api/source/http/import', { method: 'POST', headers: H, body: JSON.stringify({ manifestUrl: B + '/manifest.example.json' }) });
+  ok('manifest 收编', mf.body.ok === true && mf.body.added >= 1, { added: mf.body.added, total: mf.body.total });
+  await j('/api/library/delete-by-source', { method: 'POST', headers: H, body: JSON.stringify({ source: 'http', purgeFiles: true }) });
 
   console.log('\n==== v7 结果：PASS ' + pass + ' / FAIL ' + fail + ' ====');
   process.exit(fail ? 1 : 0);

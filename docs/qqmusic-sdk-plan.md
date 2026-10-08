@@ -753,3 +753,16 @@ D:\music-download\
 - **触发方式**：`POST /api/library/classify`（只处理已缓存音频）/ `POST /api/library/cache-classify`（先下载 HQ 再识别）/ 播放缓存后自动识别（仅「未分类」，可用设置关闭）。
 - **依赖**：`ffmpeg`/`ffprobe`（系统 PATH，可用 `MF_FFMPEG`/`MF_FFPROBE` 覆盖）+ `aubiojs`。**纯本地计算，不联网。**
 - **局限**：本质是「按速度+曲风」推断，无法真正识别鼓点型（如伦巴 3-3-2、平四蹦擦），边界速度与散拍/自由节奏会不准；已提供**手动改舞种**与「不适合舞曲」标记兜底。
+
+---
+
+## 36. 抽出标准 SDK `@hdbc/dance-sdk` + 自建服务器「整库清单」（✅ 已完成并实测）
+
+- **新包 `packages/dance-sdk`**（license GPL-3.0-or-later）：把工作台的两大核心能力做成可复用标准 SDK：
+  - **舞种识别**：`analyze` / `classify` / `DANCE_TYPES`（从 `dance-backend/src/classifier.ts` 迁入）。
+  - **多来源导入**：`createSourceRegistry({qqAnonymous,qqLibrary})` —— `qqmusic` / `netease` / `local` / `http`（`TrackSource` 接口：`search? / build / streamUrl? / authed`）。
+  - **本地缓存**：`MediaCache`（下载 + 统一转 mp3）。
+  - 另含 `localscan`（文件名解析）、`netease`（网易云适配器，含 Cookie）。
+- **后端瘦身**：`dance-backend` 改为依赖 `@hdbc/dance-sdk`（`file:../dance-sdk`）；删除内联的 `classifier.ts / localscan.ts / media.ts / sources/`；`server.ts` 通过 SDK 调用（`createSourceRegistry({ qqAnonymous: () => pool.anonymous(), qqLibrary: () => pool.libraryClient() })`）。脚本改为从 SDK `require`。
+- **自建服务器「整库清单」**：`http` 来源新增 `{ manifestUrl }`，一次**收编服务器上的全部音频为完整曲库**：清单支持 `{base, files[]}` / `string[]` / `{urls[]}`；相对 `url` 按 `base`（或清单所在目录）解析；`name` 按《HBDC 规则》命名即可自动归舞种。示例：`packages/dance-backend/public/manifest.example.json`。
+- **实测**：SDK 构建 OK；backend 构建 OK；`smoke-v6` **27/27**、`smoke-v7` **13/13**；`manifestUrl` 导入 2 项 → 自动归入「平四/慢三」→ 清理成功。

@@ -17,7 +17,7 @@ const fs = require('fs');
 const path = require('path');
 const { loadConfig } = require('../dist/config');
 const { LibraryStore } = require('../dist/library');
-const { MediaCache } = require('../dist/media');
+const { MediaCache } = require('@hdbc/dance-sdk');
 const { createQQMusicClient, HttpCookieProvider } = require('@hdbc/qqmusic-sdk');
 
 function arg(name, def) {

@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { analyze, decode, buildOnset, estimateEnergy, pulseClarity, analyzeTempo } = require('../dist/classifier');
+const { analyze, decode, buildOnset, estimateEnergy, pulseClarity, analyzeTempo } = require('@hdbc/dance-sdk');
 const aubio = require('aubiojs');
 
 (async () => {

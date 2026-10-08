@@ -1,6 +1,7 @@
 import http from 'http';
 import fsSync from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { QQMusicError, isQQMusicError, createQQMusicClient } from '@hdbc/qqmusic-sdk';
 import type { Quality, Song } from '@hdbc/qqmusic-sdk';
 import type { IncomingMessage, ServerResponse } from 'http';
@@ -14,7 +15,7 @@ import { SetlistStore, generateSetlist, type EventMeta } from './setlist';
 import { SettingsStore } from './settings';
 import { analyze } from './classifier';
 import * as netease from './sources/netease';
-import { scanDanceDir, coreName, localMid } from './localscan';
+import { scanDanceDir, parseDanceFileName, coreName, localMid } from './localscan';
 import { sendJson, readBody, parseCookies, setCookie, clearCookie } from './http';
 
 const MIME: Record<string, string> = {
@@ -182,12 +183,26 @@ export function createServer(cfg: BackendConfig) {
     return task.id;
   }
 
-  /** 按来源取流并落盘：网易云走直链下载，其余（QQ）走 SDK */
+  /** 外部来源（网易云/直链/网盘）解析出可播放直链 */
+  async function resolveExternalUrl(hit: { song: { source?: string; mid: string; url?: string | null } }): Promise<string | null> {
+    const src = hit.song.source;
+    if (src === 'http') return hit.song.url || null;
+    if (src === 'netease') return netease.songUrl(hit.song.mid);
+    return null;
+  }
+
+  /** 按来源取流并落盘：外部来源走直链下载，其余（QQ）走 SDK */
   async function assetFetcher(mid: string): Promise<string> {
     const hit = library.findByMid(mid);
-    if (hit?.song.source === 'netease') {
-      const u = await netease.songUrl(hit.song.mid);
-      if (!u) throw new QQMusicError('QQ_UNSUPPORTED', '网易云该曲无直链（可能需登录 Cookie 或会员）');
+    const src = hit?.song.source;
+    if (src === 'local') {
+      const f = hit?.song.file;
+      if (f && (await media.exists(f))) return f;
+      throw new QQMusicError('QQ_UNSUPPORTED', '本地文件不存在');
+    }
+    if (src && src !== 'qqmusic') {
+      const u = await resolveExternalUrl(hit!);
+      if (!u) throw new QQMusicError('QQ_UNSUPPORTED', `${src} 来源该曲无可用直链`);
       return media.ensureFromUrl(u, mid);
     }
     const client = await pool.libraryClient();
@@ -642,6 +657,68 @@ export function createServer(cfg: BackendConfig) {
       const taskId = body.download ? await queueDownloads(r.newMids, type) : undefined;
       return sendJson(res, 200, { ok: true, source: 'netease', type, name, added: r.added, skipped: r.skipped, queued: body.download ? r.newMids.length : 0, taskId });
     }
+    // 本地 / 社团文件夹来源：按《规则》文件名「舞种-歌名-歌手」扫描入库（文件保持原位）
+    if (p === '/api/source/local/import' && method === 'POST') {
+      if (!isAdmin) return sendJson(res, 403, { ok: false, error: 'forbidden' });
+      const body = await readBody(req);
+      const dir = String(body.dir || '');
+      if (!dir) return sendJson(res, 400, { ok: false, error: 'dir required' });
+      let scanned: Awaited<ReturnType<typeof scanDanceDir>>;
+      try {
+        scanned = await scanDanceDir(path.resolve(dir), !!body.recursive);
+      } catch (e) {
+        return sendJson(res, 400, { ok: false, error: '无法读取目录：' + (e as Error).message });
+      }
+      let added = 0;
+      let skipped = 0;
+      for (const f of scanned.files) {
+        const type = f.type || String(body.type || '未分类');
+        const mid = localMid(f.file);
+        const isNew = await library.addLocalSong(type, { mid, name: f.name, artists: f.artists, durationMs: f.durationMs ?? 0, file: f.file });
+        if (isNew) added++;
+        else skipped++;
+      }
+      return sendJson(res, 200, { ok: true, source: 'local', dir: path.resolve(dir), audio: scanned.audio, scanned: scanned.files.length, added, skipped, unparsed: scanned.unparsed.length });
+    }
+    // 自建服务器直链来源：按 URL 列表入库（播放/缓存走直链）
+    if (p === '/api/source/http/import' && method === 'POST') {
+      if (!isAdmin) return sendJson(res, 403, { ok: false, error: 'forbidden' });
+      const body = await readBody(req);
+      const type = String(body.type || '未分类');
+      const urls: string[] = Array.isArray(body.urls) ? (body.urls as unknown[]).map(String) : body.url ? [String(body.url)] : [];
+      if (!urls.length) return sendJson(res, 400, { ok: false, error: 'urls required' });
+      const groups = new Map<string, Array<{ id: string; name: string; artists: string[]; album: string | null; durationMs: number; coverUrl: string | null; url: string }>>();
+      for (const u of urls) {
+        let base = '';
+        try {
+          base = decodeURIComponent(new URL(u).pathname.split('/').pop() || '');
+        } catch {
+          base = u.split('/').pop() || u;
+        }
+        const parsed = parseDanceFileName(base);
+        const ty = parsed?.type || type;
+        const item = {
+          id: 'http:' + crypto.createHash('md5').update(u).digest('hex').slice(0, 12),
+          name: parsed?.name || base.replace(/\.[^.]+$/, ''),
+          artists: parsed?.artists ?? [],
+          album: null,
+          durationMs: parsed?.durationMs ?? 0,
+          coverUrl: null,
+          url: u,
+        };
+        const arr = groups.get(ty) ?? [];
+        arr.push(item);
+        groups.set(ty, arr);
+      }
+      let added = 0;
+      let skipped = 0;
+      for (const [ty, list] of groups) {
+        const r = await library.addExternalSongs(ty, list, 'http');
+        added += r.added;
+        skipped += r.skipped;
+      }
+      return sendJson(res, 200, { ok: true, source: 'http', added, skipped });
+    }
 
     /* -------------------------------- 歌曲 -------------------------------- */
     if (p === '/api/song/detail' && method === 'GET') {
@@ -659,11 +736,11 @@ export function createServer(cfg: BackendConfig) {
         const u = path.isAbsolute(local) ? `/api/song/stream?mid=${encodeURIComponent(mid)}` : `/media/${local}`;
         return sendJson(res, 200, { ok: true, data: { songmid: mid, quality: eff().mediaQuality, url: u, local: true, expiresAt: null } });
       }
-      if (hit?.song.source === 'netease') {
-        const nu = await netease.songUrl(hit.song.mid);
+      if (hit?.song.source && hit.song.source !== 'qqmusic' && hit.song.source !== 'local') {
+        const eu = await resolveExternalUrl(hit);
         if (eff().autoDownload && !hit.song.file) media.enqueue(mid, () => assetFetcher(mid), { onDone: onDownloaded });
-        if (!nu) return sendJson(res, 502, { ok: false, error: 'NETEASE_UNSUPPORTED', message: '网易云该曲无直链（可能需登录 Cookie 或会员）' });
-        return sendJson(res, 200, { ok: true, data: { songmid: mid, quality: '320', url: nu, local: false, expiresAt: null } });
+        if (!eu) return sendJson(res, 502, { ok: false, error: 'SOURCE_UNSUPPORTED', message: `${hit.song.source} 来源该曲无可用直链` });
+        return sendJson(res, 200, { ok: true, data: { songmid: mid, quality: '320', url: eu, local: false, expiresAt: null } });
       }
       const client = session ? await pool.userClient(session) : await pool.libraryClient();
       const u = await client.songs.url({ songmid: mid, quality });
@@ -688,16 +765,16 @@ export function createServer(cfg: BackendConfig) {
         res.end();
         return;
       }
-      if (hit?.song.source === 'netease') {
-        const nu = await netease.songUrl(hit.song.mid);
+      if (hit?.song.source && hit.song.source !== 'qqmusic' && hit.song.source !== 'local') {
+        const eu = await resolveExternalUrl(hit);
         if (eff().autoDownload && !hit.song.file) media.enqueue(mid, () => assetFetcher(mid), { onDone: onDownloaded });
-        if (!nu) {
-          const nb = Buffer.from(JSON.stringify({ ok: false, error: 'NETEASE_UNSUPPORTED', message: '网易云该曲无直链（可能需登录 Cookie 或会员）' }), 'utf8');
+        if (!eu) {
+          const nb = Buffer.from(JSON.stringify({ ok: false, error: 'SOURCE_UNSUPPORTED', message: `${hit.song.source} 来源该曲无可用直链` }), 'utf8');
           res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': String(nb.length) });
           res.end(nb);
           return;
         }
-        res.writeHead(302, { Location: nu });
+        res.writeHead(302, { Location: eu });
         res.end();
         return;
       }

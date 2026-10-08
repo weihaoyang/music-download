@@ -32,8 +32,10 @@ export interface LibrarySong {
   playedAt?: number | null;
   /** 是否属于「我喜欢」合集（稳定保留，识别舞种不会移出） */
   liked?: boolean;
-  /** 来源：'qqmusic' | 'netease'（默认 qqmusic） */
+  /** 来源：'qqmusic' | 'netease' | 'local' | 'http' | 'pan'（默认 qqmusic） */
   source?: string;
+  /** 外部直链来源的地址（http / 网盘 dlink 依据） */
+  url?: string | null;
 }
 
 /** 默认曲库：按舞种分类的元数据缓存，浏览/编排零外部依赖 */
@@ -129,10 +131,18 @@ export class LibraryStore {
     return this.addSongs(type, detail.songs);
   }
 
-  /** 加入「外部来源」（网易云等）的歌曲 */
+  /** 加入「外部来源」（网易云 / 直链 / 网盘等）的歌曲 */
   async addExternalSongs(
     type: string,
-    items: Array<{ id: string; name: string; artists?: string[]; album?: string | null; durationMs?: number; coverUrl?: string | null }>,
+    items: Array<{
+      id: string;
+      name: string;
+      artists?: string[];
+      album?: string | null;
+      durationMs?: number;
+      coverUrl?: string | null;
+      url?: string | null;
+    }>,
     source: string,
   ): Promise<{ added: number; skipped: number; newMids: string[] }> {
     const arr = this.data[type] ?? (this.data[type] = []);
@@ -157,6 +167,7 @@ export class LibraryStore {
         addedAt: Date.now(),
         file: null,
         source,
+        url: it.url ?? null,
       });
       seen.add(mid);
       newMids.push(mid);

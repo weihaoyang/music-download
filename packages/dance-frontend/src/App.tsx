@@ -67,6 +67,25 @@ const INote = () => (
     <path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z" />
   </svg>
 );
+const IPlus = () => (
+  <svg viewBox="0 0 24 24">
+    <path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z" />
+  </svg>
+);
+const SOURCE_LABELS: Record<string, string> = {
+  qqmusic: 'QQ音乐',
+  netease: '网易云',
+  local: '本地',
+  http: '直链',
+  pan: '网盘',
+};
+const SOURCE_OPTIONS = [
+  { value: 'qqmusic', label: 'QQ音乐' },
+  { value: 'netease', label: '网易云音乐' },
+  { value: 'local', label: '本地/社团文件夹' },
+  { value: 'http', label: '自建服务器直链' },
+  { value: 'pan', label: '百度网盘' },
+];
 
 function IconBtn({ title, danger, onClick, children }: { title: string; danger?: boolean; onClick: () => void; children: ReactNode }) {
   return (
@@ -91,8 +110,19 @@ export default function App() {
   const [importUrl, setImportUrl] = useState('');
   const [importPreview, setImportPreview] = useState<{ name: string; songCount: number; songs: Song[] } | null>(null);
   const [importName, setImportName] = useState('');
-  const [importType, setImportType] = useState('慢三');
+  const [importType, setImportType] = useState('未分类');
   const [importing, setImporting] = useState(false);
+
+  // 多来源
+  const [searchSource, setSearchSource] = useState<'qqmusic' | 'netease'>('qqmusic');
+  const [addType, setAddType] = useState('未分类');
+  const [importSource, setImportSource] = useState<'qqmusic' | 'netease' | 'local' | 'http' | 'pan'>('qqmusic');
+  const [neInput, setNeInput] = useState('');
+  const [localDir, setLocalDir] = useState('');
+  const [localRec, setLocalRec] = useState(true);
+  const [httpUrls, setHttpUrls] = useState('');
+  const [panShare, setPanShare] = useState('');
+  const [panPwd, setPanPwd] = useState('');
   const [loadingImport, setLoadingImport] = useState(false);
   const [cloning, setCloning] = useState(false);
 
@@ -115,7 +145,7 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [theme, setThemeState] = useState<ThemeMode>(getTheme());
   const [adminTokenState, setAdminTokenState] = useState(getAdminToken());
-  const [settings, setSettings] = useState<{ mediaDir: string; mediaQuality: string; autoDownload: boolean; cacheLimitBytes: number; autoClassify: boolean }>({ mediaDir: '', mediaQuality: '320', autoDownload: true, cacheLimitBytes: 20 * 1024 * 1024 * 1024, autoClassify: true });
+  const [settings, setSettings] = useState<{ mediaDir: string; mediaQuality: string; autoDownload: boolean; cacheLimitBytes: number; autoClassify: boolean; neteaseCookie: string; baiduCookie: string }>({ mediaDir: '', mediaQuality: '320', autoDownload: true, cacheLimitBytes: 20 * 1024 * 1024 * 1024, autoClassify: true, neteaseCookie: '', baiduCookie: '' });
   const [usage, setUsage] = useState<{ bytes: number; files: number; limit: number } | null>(null);
 
   const [calibDir, setCalibDir] = useState('');
@@ -165,8 +195,8 @@ export default function App() {
   }
   function loadSettings() {
     setAdminToken(adminTokenState);
-    adminFetch<{ data: { mediaDir: string; mediaQuality: string; autoDownload: boolean; cacheLimitBytes: number; autoClassify: boolean } }>('/api/settings', 'GET')
-      .then((r) => setSettings({ mediaDir: r.data.mediaDir, mediaQuality: r.data.mediaQuality, autoDownload: r.data.autoDownload, cacheLimitBytes: r.data.cacheLimitBytes ?? 20 * 1024 * 1024 * 1024, autoClassify: r.data.autoClassify !== false }))
+    adminFetch<{ data: { mediaDir: string; mediaQuality: string; autoDownload: boolean; cacheLimitBytes: number; autoClassify: boolean; neteaseCookie: string; baiduCookie: string } }>('/api/settings', 'GET')
+      .then((r) => setSettings({ mediaDir: r.data.mediaDir, mediaQuality: r.data.mediaQuality, autoDownload: r.data.autoDownload, cacheLimitBytes: r.data.cacheLimitBytes ?? 20 * 1024 * 1024 * 1024, autoClassify: r.data.autoClassify !== false, neteaseCookie: r.data.neteaseCookie || '', baiduCookie: r.data.baiduCookie || '' }))
       .catch((e) => Toast.warning('读取设置失败（检查管理员口令）：' + e.message));
     adminFetch<{ data: { bytes: number; files: number; limit: number } }>('/api/media/usage', 'GET')
       .then((r) => setUsage(r.data))
@@ -174,7 +204,7 @@ export default function App() {
   }
   function saveSettings() {
     setAdminToken(adminTokenState);
-    adminFetch('/api/settings', 'PUT', { mediaDir: settings.mediaDir, mediaQuality: settings.mediaQuality, autoDownload: settings.autoDownload, cacheLimitBytes: settings.cacheLimitBytes, autoClassify: settings.autoClassify })
+    adminFetch('/api/settings', 'PUT', { mediaDir: settings.mediaDir, mediaQuality: settings.mediaQuality, autoDownload: settings.autoDownload, cacheLimitBytes: settings.cacheLimitBytes, autoClassify: settings.autoClassify, neteaseCookie: settings.neteaseCookie, baiduCookie: settings.baiduCookie })
       .then(() => {
         Toast.success('设置已保存并生效');
         setSettingsOpen(false);
@@ -190,6 +220,49 @@ export default function App() {
         Toast.success(`「我喜欢」已导入曲库：新增 ${r.added}，跳过 ${r.skipped}（共 ${r.fetched}/${r.total}）`);
         loadTypes();
         setActiveType('__liked__');
+      })
+      .catch((e) => Toast.error('导入失败：' + e.message));
+  }
+  function importNetease() {
+    setAdminToken(adminTokenState);
+    if (!neInput.trim()) return Toast.warning('填入网易云歌单/单曲链接');
+    Toast.info('正在从网易云导入…');
+    adminFetch<{ added: number; skipped: number; name: string }>('/api/source/netease/import', 'POST', { type: importType, input: neInput.trim() })
+      .then((r) => {
+        Toast.success(`网易云 →「${importType}」：新增 ${r.added}，跳过 ${r.skipped}${r.name ? '（' + r.name + '）' : ''}`);
+        loadTypes();
+      })
+      .catch((e) => Toast.error('导入失败：' + e.message));
+  }
+  function importLocal() {
+    setAdminToken(adminTokenState);
+    if (!localDir.trim()) return Toast.warning('填入本地/社团文件夹路径');
+    adminFetch<{ added: number; skipped: number; scanned: number; unparsed: number }>('/api/source/local/import', 'POST', { dir: localDir.trim(), recursive: localRec })
+      .then((r) => {
+        Toast.success(`本地导入：新增 ${r.added}，跳过 ${r.skipped}（扫描 ${r.scanned}，文件名不合规 ${r.unparsed}）`);
+        loadTypes();
+      })
+      .catch((e) => Toast.error('导入失败：' + e.message));
+  }
+  function importHttp() {
+    setAdminToken(adminTokenState);
+    const urls = httpUrls.split(/\s+/).map((s) => s.trim()).filter(Boolean);
+    if (!urls.length) return Toast.warning('填入至少一个直链 URL（每行一个）');
+    adminFetch<{ added: number; skipped: number }>('/api/source/http/import', 'POST', { type: importType, urls })
+      .then((r) => {
+        Toast.success(`直链 →「${importType}」：新增 ${r.added}，跳过 ${r.skipped}`);
+        loadTypes();
+      })
+      .catch((e) => Toast.error('导入失败：' + e.message));
+  }
+  function importPan() {
+    setAdminToken(adminTokenState);
+    if (!panShare.trim()) return Toast.warning('填入百度网盘分享链接');
+    Toast.info('正在解析网盘分享…');
+    adminFetch<{ added: number; skipped: number; total: number }>('/api/source/pan/import', 'POST', { type: importType, shareUrl: panShare.trim(), pwd: panPwd || undefined })
+      .then((r) => {
+        Toast.success(`网盘导入：新增 ${r.added}，跳过 ${r.skipped}（共 ${r.total} 个音频）`);
+        loadTypes();
       })
       .catch((e) => Toast.error('导入失败：' + e.message));
   }
@@ -337,10 +410,41 @@ export default function App() {
   function doSearch() {
     if (!kw.trim()) return;
     setLoadingSearch(true);
-    api<{ items: Song[] }>('/api/search?keywords=' + encodeURIComponent(kw))
-      .then((r) => setResults(r.items || []))
+    const path =
+      searchSource === 'netease'
+        ? '/api/search/netease?keywords=' + encodeURIComponent(kw) + '&limit=30'
+        : '/api/search?keywords=' + encodeURIComponent(kw);
+    api<{ items: Array<Record<string, unknown>> }>(path)
+      .then((r) => {
+        const items = (r.items || []).map((x) =>
+          searchSource === 'netease'
+            ? {
+                mid: String(x.id),
+                name: String(x.name ?? ''),
+                artists: (x.artists as string[]) || [],
+                album: x.album ? { name: String(x.album) } : null,
+                durationMs: Number(x.durationMs) || 0,
+                coverUrl: (x.coverUrl as string) || null,
+              }
+            : x,
+        );
+        setResults(items as unknown as Song[]);
+      })
       .catch((e) => Toast.error(e.message))
       .finally(() => setLoadingSearch(false));
+  }
+  function addSearchResult(s: Song) {
+    setAdminToken(adminTokenState);
+    const req =
+      searchSource === 'netease'
+        ? adminFetch<{ added: number }>('/api/source/netease/import', 'POST', { type: addType, input: 'https://music.163.com/song?id=' + s.mid })
+        : adminFetch<{ added: number }>('/api/source/qqmusic/import', 'POST', { type: addType, songMid: s.mid });
+    req
+      .then((r) => {
+        Toast.success(r.added ? `已加入「${addType}」` : `「${addType}」中已存在`);
+        loadTypes();
+      })
+      .catch((e) => Toast.error('加入失败：' + e.message));
   }
   function doImport() {
     if (!importUrl.trim()) return;
@@ -548,7 +652,7 @@ export default function App() {
   }, [types, typeOptions]);
   const orderArr = useMemo(() => orderText.split(/[\s,，、→>/-]+/).filter(Boolean), [orderText]);
 
-  function SongRow({ s, list }: { s: LibrarySong | Song; list: Array<LibrarySong | Song> }) {
+  function SongRow({ s, list, onAdd }: { s: LibrarySong | Song; list: Array<LibrarySong | Song>; onAdd?: () => void }) {
     const isLib = 'type' in s;
     const lib = s as LibrarySong;
     return (
@@ -563,6 +667,11 @@ export default function App() {
         </div>
         <div className="song-meta">
           {isLib ? <span className="chip chip-gold">{lib.type}</span> : null}
+          {isLib && lib.source && lib.source !== 'qqmusic' ? (
+            <span className="chip chip-src" title={'来源：' + (SOURCE_LABELS[lib.source] || lib.source)}>
+              {SOURCE_LABELS[lib.source] || lib.source}
+            </span>
+          ) : null}
           {isLib && lib.mood ? <span className={'chip ' + (lib.mood === '欢快' ? 'chip-lively' : lib.mood === '舒缓' ? 'chip-mellow' : 'chip-mid')}>{lib.mood}</span> : null}
           {isLib && lib.suitable === false ? <span className="chip chip-warn" title={lib.warning || '节奏不稳，可能不适合作为舞曲'}>不适合舞曲</span> : null}
           {isLib && lib.file ? <span className="chip chip-green">已缓存</span> : null}
@@ -573,6 +682,11 @@ export default function App() {
           <IconBtn title="播放" onClick={() => play(s, list)}>
             <IPlay />
           </IconBtn>
+          {onAdd ? (
+            <IconBtn title="加入曲库" onClick={onAdd}>
+              <IPlus />
+            </IconBtn>
+          ) : null}
           {isLib ? (
             <>
               <IconBtn title="编辑" onClick={() => openEdit(lib)}>
@@ -665,9 +779,19 @@ export default function App() {
           <TabPane tab="搜索" itemKey="search">
             <div className="panel">
               <div className="panel-head">
-                <span className="panel-title">搜索 QQ 音乐</span>
+                <span className="panel-title">搜索</span>
                 <div className="panel-actions">
-                  <Input value={kw} onChange={setKw} onEnterPress={doSearch} placeholder="歌曲 / 歌手" style={{ width: 300 }} />
+                  <Select
+                    value={searchSource}
+                    onChange={(v) => setSearchSource(v as 'qqmusic' | 'netease')}
+                    style={{ width: 130 }}
+                    optionList={[
+                      { value: 'qqmusic', label: 'QQ音乐' },
+                      { value: 'netease', label: '网易云音乐' },
+                    ]}
+                  />
+                  <Input value={kw} onChange={setKw} onEnterPress={doSearch} placeholder="歌曲 / 歌手" style={{ width: 250 }} />
+                  <Select allowCreate value={addType} onChange={(v) => setAddType(v as string)} style={{ width: 130 }} optionList={typeOptions} placeholder="加入舞种" />
                   <Button theme="solid" type="primary" onClick={doSearch} loading={loadingSearch}>
                     搜索
                   </Button>
@@ -676,7 +800,7 @@ export default function App() {
               {results.length ? (
                 <div className="songlist">
                   {results.map((s) => (
-                    <SongRow key={s.mid} s={s} list={results} />
+                    <SongRow key={s.mid} s={s} list={results} onAdd={() => addSearchResult(s)} />
                   ))}
                 </div>
               ) : (
@@ -684,26 +808,30 @@ export default function App() {
                   <div className="empty-ico">
                     <INote />
                   </div>
-                  输入关键词搜索
+                  输入关键词搜索，点结果右侧「+」加入曲库
                 </div>
               )}
             </div>
           </TabPane>
 
-          <TabPane tab="歌单导入" itemKey="imp">
+          <TabPane tab="导入来源" itemKey="imp">
             <div className="panel">
               <div className="panel-head">
-                <span className="panel-title">导入外部歌单</span>
+                <span className="panel-title">导入来源</span>
                 <div className="panel-actions">
-                  <Input value={importUrl} onChange={setImportUrl} placeholder="QQ 音乐歌单链接 / 分享短链" style={{ width: 330 }} />
                   <Select
-                    allowCreate
-                    value={importType}
-                    onChange={(v) => setImportType(v as string)}
-                    style={{ width: 128 }}
-                    optionList={typeOptions}
-                    placeholder="目标舞种"
+                    value={importSource}
+                    onChange={(v) => setImportSource(v as 'qqmusic' | 'netease' | 'local' | 'http' | 'pan')}
+                    style={{ width: 160 }}
+                    optionList={SOURCE_OPTIONS}
                   />
+                  <Select allowCreate value={importType} onChange={(v) => setImportType(v as string)} style={{ width: 150 }} optionList={typeOptions} placeholder="目标舞种" />
+                </div>
+              </div>
+
+              {importSource === 'qqmusic' ? (
+                <div className="panel-actions" style={{ marginBottom: 10 }}>
+                  <Input value={importUrl} onChange={setImportUrl} placeholder="QQ 音乐歌单链接 / 分享短链" style={{ width: 340 }} />
                   <Button theme="solid" type="primary" onClick={importToLibrary} loading={importing}>
                     导入到曲库
                   </Button>
@@ -714,11 +842,58 @@ export default function App() {
                     克隆到我的歌单
                   </Button>
                 </div>
-              </div>
+              ) : null}
+
+              {importSource === 'netease' ? (
+                <div className="panel-actions" style={{ marginBottom: 10 }}>
+                  <Input value={neInput} onChange={setNeInput} placeholder="网易云歌单/单曲链接或 ID" style={{ width: 420 }} />
+                  <Button theme="solid" type="primary" onClick={importNetease}>
+                    导入到曲库
+                  </Button>
+                </div>
+              ) : null}
+
+              {importSource === 'local' ? (
+                <div className="panel-actions" style={{ marginBottom: 10 }}>
+                  <Input value={localDir} onChange={setLocalDir} placeholder="本机文件夹，如 D:\\舞曲库" style={{ width: 360 }} />
+                  <RadioGroup value={localRec ? 1 : 0} onChange={(e) => setLocalRec(Number(e.target.value) === 1)}>
+                    <Radio value={1}>含子目录</Radio>
+                    <Radio value={0}>仅本级</Radio>
+                  </RadioGroup>
+                  <Button theme="solid" type="primary" onClick={importLocal}>
+                    扫描入库
+                  </Button>
+                </div>
+              ) : null}
+
+              {importSource === 'http' ? (
+                <div className="urls-box">
+                  <textarea className="urls-input" value={httpUrls} onChange={(e) => setHttpUrls(e.target.value)} placeholder="每行一个音频直链 URL（自建服务器/对象存储）" rows={4} />
+                  <Button theme="solid" type="primary" onClick={importHttp}>
+                    导入到曲库
+                  </Button>
+                </div>
+              ) : null}
+
+              {importSource === 'pan' ? (
+                <div className="panel-actions" style={{ marginBottom: 10 }}>
+                  <Input value={panShare} onChange={setPanShare} placeholder="百度网盘分享链接 https://pan.baidu.com/s/1..." style={{ width: 360 }} />
+                  <Input value={panPwd} onChange={setPanPwd} placeholder="提取码（可选）" style={{ width: 120 }} />
+                  <Button theme="solid" type="primary" onClick={importPan}>
+                    导入到曲库
+                  </Button>
+                </div>
+              ) : null}
+
               <div className="hint" style={{ marginBottom: 10 }}>
-                「导入到曲库」把歌单加入默认曲库（选目标舞种），并后台缓存音频，之后可浏览/排曲/离线播放；「克隆到我的歌单」写回你的 QQ 账号，需先登录。
+                {importSource === 'qqmusic' && 'QQ：歌单链接导入到默认曲库，可后台缓存；「克隆」写回你的 QQ 账号（需登录）。'}
+                {importSource === 'netease' && '网易云：歌单/单曲链接或 ID，导入后播放时再缓存（部分歌需在设置里配 neteaseCookie）。'}
+                {importSource === 'local' && '本地/社团文件夹：按《规则》文件名「舞种-歌名-歌手」扫描入库，文件保持原位。'}
+                {importSource === 'http' && '自建直链：每行一个音频 URL，播放时下载并转 mp3。'}
+                {importSource === 'pan' && '百度网盘：需在设置里配 baiduCookie(BDUSS)，解析分享后按文件名入库，播放时再解析直链。'}
               </div>
-              {importPreview ? (
+
+              {importSource === 'qqmusic' && importPreview ? (
                 <>
                   <div className="hint" style={{ marginBottom: 10 }}>
                     {importPreview.name} · 共 {importPreview.songCount} 首（预览 {importPreview.songs.length}）
@@ -729,14 +904,7 @@ export default function App() {
                     ))}
                   </div>
                 </>
-              ) : (
-                <div className="empty">
-                  <div className="empty-ico">
-                    <INote />
-                  </div>
-                  粘贴歌单链接或分享短链，一键解析
-                </div>
-              )}
+              ) : null}
             </div>
           </TabPane>
 
@@ -994,6 +1162,14 @@ export default function App() {
               <Radio value={1}>开（仅「未分类」）</Radio>
               <Radio value={0}>关</Radio>
             </RadioGroup>
+          </div>
+          <div className="field">
+            <span>网易云 Cookie</span>
+            <Input value={settings.neteaseCookie} onChange={(v) => setSettings((s) => ({ ...s, neteaseCookie: v }))} placeholder="MUSIC_U=...（提升网易云播放成功率）" />
+          </div>
+          <div className="field">
+            <span>百度网盘 Cookie</span>
+            <Input value={settings.baiduCookie} onChange={(v) => setSettings((s) => ({ ...s, baiduCookie: v }))} placeholder="BDUSS=...; STOKEN=...（网盘分享/下载用）" />
           </div>
           <Button theme="solid" type="primary" onClick={saveSettings}>
             保存

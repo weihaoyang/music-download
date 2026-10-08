@@ -109,6 +109,8 @@ export interface LibrarySong {
   stability?: number | null;
   suitable?: boolean | null;
   warning?: string | null;
+  /** 来源：qqmusic / netease / local / http / pan */
+  source?: string | null;
 }
 
 export interface Song {

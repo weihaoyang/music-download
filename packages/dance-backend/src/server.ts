@@ -780,6 +780,18 @@ export function createServer(cfg: BackendConfig) {
         return sendJson(res, 502, { ok: false, error: 'PAN_ERROR', message: (e as Error).message });
       }
     }
+    // QQ 音乐：单曲入库
+    if (p === '/api/source/qqmusic/import' && method === 'POST') {
+      if (!isAdmin) return sendJson(res, 403, { ok: false, error: 'forbidden' });
+      const body = await readBody(req);
+      const type = String(body.type || '未分类');
+      const songMid = String(body.songMid || body.mid || '');
+      if (!songMid) return sendJson(res, 400, { ok: false, error: 'songMid required' });
+      const client = await pool.anonymous();
+      const song = await client.songs.detail({ songmid: songMid });
+      const r = await library.addSongs(type, [song]);
+      return sendJson(res, 200, { ok: true, source: 'qqmusic', type, name: song.name, added: r.added, skipped: r.skipped });
+    }
 
     /* -------------------------------- 歌曲 -------------------------------- */
     if (p === '/api/song/detail' && method === 'GET') {

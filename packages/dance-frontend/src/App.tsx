@@ -116,6 +116,7 @@ export default function App() {
   // 多来源
   const [searchSource, setSearchSource] = useState<'qqmusic' | 'netease'>('qqmusic');
   const [addType, setAddType] = useState('未分类');
+  const [sourceFilter, setSourceFilter] = useState('all');
   const [importSource, setImportSource] = useState<'qqmusic' | 'netease' | 'local' | 'http' | 'pan'>('qqmusic');
   const [neInput, setNeInput] = useState('');
   const [localDir, setLocalDir] = useState('');
@@ -650,6 +651,10 @@ export default function App() {
     const head = liked ? [{ label: `我喜欢（${liked.count}）`, value: '__liked__' }] : [];
     return [...head, ...typeOptions];
   }, [types, typeOptions]);
+  const libSongs = useMemo(
+    () => (sourceFilter === 'all' ? songs : songs.filter((s) => (s.source || 'qqmusic') === sourceFilter)),
+    [songs, sourceFilter],
+  );
   const orderArr = useMemo(() => orderText.split(/[\s,，、→>/-]+/).filter(Boolean), [orderText]);
 
   function SongRow({ s, list, onAdd }: { s: LibrarySong | Song; list: Array<LibrarySong | Song>; onAdd?: () => void }) {
@@ -748,9 +753,15 @@ export default function App() {
                 <span className="panel-title">默认曲库</span>
                 <div className="panel-actions">
                   <span className="hint">
-                    {songs.filter((s) => s.file).length} / {songs.length} 已缓存
+                    {libSongs.filter((s) => s.file).length} / {libSongs.length} 已缓存
                   </span>
-                  <Select value={activeType} onChange={(v) => setActiveType(v as string)} style={{ width: 170 }} optionList={libFilterOptions} />
+                  <Select value={activeType} onChange={(v) => setActiveType(v as string)} style={{ width: 160 }} optionList={libFilterOptions} />
+                  <Select
+                    value={sourceFilter}
+                    onChange={(v) => setSourceFilter(v as string)}
+                    style={{ width: 130 }}
+                    optionList={[{ value: 'all', label: '全部来源' }, ...SOURCE_OPTIONS]}
+                  />
                   <Button onClick={cacheMissing}>缓存缺失音频</Button>
                   <Button theme="solid" type="tertiary" onClick={autoClassify}>
                     自动分类
@@ -759,10 +770,10 @@ export default function App() {
                   <Button onClick={importLiked}>导入「我喜欢」</Button>
                 </div>
               </div>
-              {songs.length ? (
+              {libSongs.length ? (
                 <div className="songlist">
-                  {songs.map((s) => (
-                    <SongRow key={s.mid} s={s} list={songs} />
+                  {libSongs.map((s) => (
+                    <SongRow key={s.mid} s={s} list={libSongs} />
                   ))}
                 </div>
               ) : (

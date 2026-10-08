@@ -23,14 +23,13 @@
 
 ## 二、功能
 
-- **曲库**：按舞种浏览；支持**来源筛选**（QQ音乐 / 网易云 / 本地 / 直链 / 网盘）；
+- **曲库**：按舞种浏览；支持**来源筛选**（QQ音乐 / 网易云 / 本地 / 直链）；
   「我喜欢」稳定合集（跨舞种、识别后不移出）；每首显示 **舞种 / 曲风 / BPM / 稳定性 / 来源 / 缓存状态**。
 - **多来源导入**：
   - **QQ音乐**：歌单导入 / 单曲加入 / 克隆到我的歌单；
   - **网易云音乐**：搜索、歌单/单曲链接或 ID 导入（免加密端点；部分歌需 `neteaseCookie`）；
   - **本地/社团文件夹**：按《HBDC 规则》文件名 `舞种-歌名-歌手` 扫描入库（文件原位）；
-  - **自建服务器直链**：URL 列表导入；
-  - **百度网盘**：分享链接 + 提取码（需 `baiduCookie`）。
+  - **自建服务器直链**：URL 列表导入。
 - **自动识别舞种**：ffmpeg 解码 + aubio 测速 → 按《HBDC 规则 表3》BPM 区间映射到
   **慢三/平四/伦巴/并四/快三/慢四/吉特巴**；曲风（欢快/舒缓）用于八度纠错与边界判定；
   另判「是否适合作为舞曲」。见 plans §28/§35。
@@ -87,8 +86,7 @@ python bridge.py     # 暴露 http://127.0.0.1:8899/cookie
 }
 ```
 
-- `neteaseCookie`（`MUSIC_U=...`）、`baiduCookie`（`BDUSS=...;STOKEN=...`）可在
-  前端「设置（管理员）」里填，或写进 config.json。
+- `neteaseCookie`（`MUSIC_U=...`）可在前端「设置（管理员）」里填，或写进 config.json。
 
 ---
 
@@ -97,7 +95,7 @@ python bridge.py     # 暴露 http://127.0.0.1:8899/cookie
 ```powershell
 cd packages\dance-backend
 node scripts\smoke-v6.js      # 全量冒烟（曲库/搜索/播放/排曲/缓存并分类/前端路由）
-node scripts\smoke-v7.js      # 多来源冒烟（来源列表/网易云/QQ单曲/本地/直链/网盘）
+node scripts\smoke-v7.js      # 多来源冒烟（来源列表/网易云/QQ单曲/本地/直链）
 node scripts\build-library.js # 按 library.config.json 批量离线构建
 cd ..\qqmusic-sdk && npm test # SDK 契约单测
 ```

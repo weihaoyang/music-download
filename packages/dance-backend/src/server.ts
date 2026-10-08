@@ -15,7 +15,6 @@ import { SetlistStore, generateSetlist, type EventMeta } from './setlist';
 import { SettingsStore } from './settings';
 import { analyze } from './classifier';
 import * as netease from './sources/netease';
-import * as pan from './sources/pan';
 import { createSourceRegistry, type Draft } from './sources/registry';
 import { scanDanceDir, parseDanceFileName, coreName, localMid } from './localscan';
 import { sendJson, readBody, parseCookies, setCookie, clearCookie } from './http';
@@ -95,7 +94,6 @@ export function createServer(cfg: BackendConfig) {
       cacheLimitBytes: s.cacheLimitBytes ?? cfg.cacheLimitBytes,
       autoClassify: s.autoClassify ?? cfg.autoClassify,
       neteaseCookie: s.neteaseCookie ?? cfg.neteaseCookie,
-      baiduCookie: s.baiduCookie ?? cfg.baiduCookie,
     };
   }
 
@@ -113,7 +111,6 @@ export function createServer(cfg: BackendConfig) {
     const e = eff();
     media = new MediaCache(e.mediaDir, e.mediaQuality, e.downloadConcurrency, cfg.logger);
     netease.setNeteaseCookie(e.neteaseCookie);
-    pan.setBaiduCookie(e.baiduCookie);
     try {
       fsSync.mkdirSync(e.mediaDir, { recursive: true });
     } catch {
@@ -376,12 +373,10 @@ export function createServer(cfg: BackendConfig) {
       if (body.cacheLimitBytes !== undefined) patch.cacheLimitBytes = Number(body.cacheLimitBytes);
       if (typeof body.autoClassify === 'boolean') patch.autoClassify = body.autoClassify;
       if (typeof body.neteaseCookie === 'string') patch.neteaseCookie = String(body.neteaseCookie).trim();
-      if (typeof body.baiduCookie === 'string') patch.baiduCookie = String(body.baiduCookie).trim();
       await settings.update(patch);
       const e = eff();
       media = new MediaCache(e.mediaDir, e.mediaQuality, e.downloadConcurrency, cfg.logger);
       netease.setNeteaseCookie(e.neteaseCookie);
-      pan.setBaiduCookie(e.baiduCookie);
       try {
         fsSync.mkdirSync(e.mediaDir, { recursive: true });
       } catch {

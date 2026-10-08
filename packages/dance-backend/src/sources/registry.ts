@@ -4,7 +4,6 @@ import type { Song } from '@hdbc/qqmusic-sdk';
 import type { ClientPool } from '../clients';
 import { scanDanceDir, parseDanceFileName, localMid } from '../localscan';
 import * as netease from './netease';
-import * as pan from './pan';
 
 /** 归一化后的「待入库曲目」草稿（各来源产出的统一形态） */
 export interface Draft {
@@ -162,35 +161,6 @@ export function createSourceRegistry(ctx: { pool: ClientPool }): Map<string, Sou
         return { name: '直链', drafts };
       },
       streamUrl: async (song) => song.url || null,
-    },
-    {
-      id: 'pan',
-      label: '百度网盘',
-      kind: 'online',
-      authed: () => pan.hasBaiduCookie(),
-      build: async (body) => {
-        const shareUrl = String(body.shareUrl || '');
-        if (!shareUrl) throw new Error('shareUrl required');
-        const { items, ref } = await pan.listShareAudio(shareUrl, body.pwd ? String(body.pwd) : undefined);
-        const drafts: Draft[] = items.map((it) => {
-          const info = draftFromAudioName(it.name);
-          return {
-            id: 'pan:' + it.fsId,
-            name: info.name,
-            artists: info.artists,
-            album: null,
-            durationMs: info.durationMs,
-            coverUrl: null,
-            url: pan.encodeRef(ref, it),
-            type: info.type,
-          };
-        });
-        return { name: '网盘', drafts };
-      },
-      streamUrl: async (song) => {
-        const ref = pan.decodeRef(song.url || '');
-        return ref ? pan.resolveDlink(ref) : null;
-      },
     },
   ];
   return new Map(defs.map((d) => [d.id, d]));

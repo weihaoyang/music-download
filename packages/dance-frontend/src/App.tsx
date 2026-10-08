@@ -77,14 +77,12 @@ const SOURCE_LABELS: Record<string, string> = {
   netease: '网易云',
   local: '本地',
   http: '直链',
-  pan: '网盘',
 };
 const SOURCE_OPTIONS = [
   { value: 'qqmusic', label: 'QQ音乐' },
   { value: 'netease', label: '网易云音乐' },
   { value: 'local', label: '本地/社团文件夹' },
   { value: 'http', label: '自建服务器直链' },
-  { value: 'pan', label: '百度网盘' },
 ];
 
 function IconBtn({ title, danger, onClick, children }: { title: string; danger?: boolean; onClick: () => void; children: ReactNode }) {
@@ -146,7 +144,7 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [theme, setThemeState] = useState<ThemeMode>(getTheme());
   const [adminTokenState, setAdminTokenState] = useState(getAdminToken());
-  const [settings, setSettings] = useState<{ mediaDir: string; mediaQuality: string; autoDownload: boolean; cacheLimitBytes: number; autoClassify: boolean; neteaseCookie: string; baiduCookie: string }>({ mediaDir: '', mediaQuality: '320', autoDownload: true, cacheLimitBytes: 20 * 1024 * 1024 * 1024, autoClassify: true, neteaseCookie: '', baiduCookie: '' });
+  const [settings, setSettings] = useState<{ mediaDir: string; mediaQuality: string; autoDownload: boolean; cacheLimitBytes: number; autoClassify: boolean; neteaseCookie: string }>({ mediaDir: '', mediaQuality: '320', autoDownload: true, cacheLimitBytes: 20 * 1024 * 1024 * 1024, autoClassify: true, neteaseCookie: '' });
   const [usage, setUsage] = useState<{ bytes: number; files: number; limit: number } | null>(null);
 
   const [calibDir, setCalibDir] = useState('');
@@ -196,8 +194,8 @@ export default function App() {
   }
   function loadSettings() {
     setAdminToken(adminTokenState);
-    adminFetch<{ data: { mediaDir: string; mediaQuality: string; autoDownload: boolean; cacheLimitBytes: number; autoClassify: boolean; neteaseCookie: string; baiduCookie: string } }>('/api/settings', 'GET')
-      .then((r) => setSettings({ mediaDir: r.data.mediaDir, mediaQuality: r.data.mediaQuality, autoDownload: r.data.autoDownload, cacheLimitBytes: r.data.cacheLimitBytes ?? 20 * 1024 * 1024 * 1024, autoClassify: r.data.autoClassify !== false, neteaseCookie: r.data.neteaseCookie || '', baiduCookie: r.data.baiduCookie || '' }))
+    adminFetch<{ data: { mediaDir: string; mediaQuality: string; autoDownload: boolean; cacheLimitBytes: number; autoClassify: boolean; neteaseCookie: string } }>('/api/settings', 'GET')
+      .then((r) => setSettings({ mediaDir: r.data.mediaDir, mediaQuality: r.data.mediaQuality, autoDownload: r.data.autoDownload, cacheLimitBytes: r.data.cacheLimitBytes ?? 20 * 1024 * 1024 * 1024, autoClassify: r.data.autoClassify !== false, neteaseCookie: r.data.neteaseCookie || '' }))
       .catch((e) => Toast.warning('读取设置失败（检查管理员口令）：' + e.message));
     adminFetch<{ data: { bytes: number; files: number; limit: number } }>('/api/media/usage', 'GET')
       .then((r) => setUsage(r.data))
@@ -205,7 +203,7 @@ export default function App() {
   }
   function saveSettings() {
     setAdminToken(adminTokenState);
-    adminFetch('/api/settings', 'PUT', { mediaDir: settings.mediaDir, mediaQuality: settings.mediaQuality, autoDownload: settings.autoDownload, cacheLimitBytes: settings.cacheLimitBytes, autoClassify: settings.autoClassify, neteaseCookie: settings.neteaseCookie, baiduCookie: settings.baiduCookie })
+    adminFetch('/api/settings', 'PUT', { mediaDir: settings.mediaDir, mediaQuality: settings.mediaQuality, autoDownload: settings.autoDownload, cacheLimitBytes: settings.cacheLimitBytes, autoClassify: settings.autoClassify, neteaseCookie: settings.neteaseCookie })
       .then(() => {
         Toast.success('设置已保存并生效');
         setSettingsOpen(false);
@@ -1234,10 +1232,6 @@ export default function App() {
           <div className="field">
             <span>网易云 Cookie</span>
             <Input value={settings.neteaseCookie} onChange={(v) => setSettings((s) => ({ ...s, neteaseCookie: v }))} placeholder="MUSIC_U=...（提升网易云播放成功率）" />
-          </div>
-          <div className="field">
-            <span>百度网盘 Cookie</span>
-            <Input value={settings.baiduCookie} onChange={(v) => setSettings((s) => ({ ...s, baiduCookie: v }))} placeholder="BDUSS=...; STOKEN=...（网盘分享/下载用）" />
           </div>
           <Button theme="solid" type="primary" onClick={saveSettings}>
             保存

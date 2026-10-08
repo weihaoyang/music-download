@@ -28,7 +28,7 @@ async function findMid(mid, types) {
   console.log('== 1. /api/sources ==');
   const src = await j('/api/sources');
   const ids = (src.body.data || []).map((s) => s.id);
-  ok('sources 5 项', ids.length === 5 && ['qqmusic', 'netease', 'local', 'http', 'pan'].every((x) => ids.includes(x)), ids);
+  ok('sources 4 项', ids.length === 4 && ['qqmusic', 'netease', 'local', 'http'].every((x) => ids.includes(x)), ids);
   const anyType = types.find((t) => t.count > 0);
   if (anyType) {
     const anyList = await j('/api/library/list?type=' + encodeURIComponent(anyType.type));
@@ -87,11 +87,7 @@ async function findMid(mid, types) {
     if (ht2) await del(ht2.mid);
   } else ok('http import', false, 'no netease url');
 
-  console.log('== 7. 网盘（无 Cookie 时应报错）==');
-  const pan = await j('/api/source/pan/import', { method: 'POST', headers: H, body: JSON.stringify({ type: '未分类', shareUrl: 'https://pan.baidu.com/s/1abcdEFG' }) });
-  ok('pan 需 Cookie（或成功）', pan.body.ok === true || pan.body.error === 'SOURCE_ERROR' || pan.body.error === 'PAN_ERROR', { ok: pan.body.ok, error: pan.body.error });
-
-  console.log('== 8. 按来源批量操作 ==');
+  console.log('== 7. 按来源批量操作 ==');
   let url8 = null;
   try { url8 = await require('../dist/sources/netease').songUrl('2652820720'); } catch { /* ignore */ }
   if (url8) await j('/api/source/http/import', { method: 'POST', headers: H, body: JSON.stringify({ type: '未分类', urls: [url8] }) });

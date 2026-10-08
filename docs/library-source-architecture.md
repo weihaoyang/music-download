@@ -22,7 +22,7 @@
 ## 2. 设计目标
 
 1. **曲目与音频资产解耦**：曲目是「我们库里的这一首」，资产是「实际可播放的文件/链接」，一首可有多个。
-2. **来源可追溯**：每个资产记录**来源**（QQ/本地/直链/网盘）与**派生关系**（剪辑自哪版）。
+2. **来源可追溯**：每个资产记录**来源**（QQ/网易云/本地/直链）与**派生关系**（剪辑自哪版）。
 3. **归属清晰**：曲目记录**版权归属**（`external` 外部引进 / `club` 社团自制）与**是否编辑过**。
 4. **来源可扩展**：新增下载来源 = 实现一个适配器，不改核心。
 5. **向后兼容**：现有 mid-keyed 曲库平滑迁移，播放/排曲零中断。
@@ -58,14 +58,13 @@ interface Track {
 type OriginRef =
   | { source: 'qqmusic'; mid: string; mediaMid?: string }
   | { source: 'local'; path: string }
-  | { source: 'http'; url: string }
-  | { source: 'netdisk'; provider: string; fileId: string };
+  | { source: 'http'; url: string };
 
 interface Asset {
   id: string;
   trackId: string;
   kind: 'original' | 'edited';    // 原版 / 剪辑版
-  source: 'qqmusic' | 'local' | 'http' | 'netdisk';
+  source: 'qqmusic' | 'netease' | 'local' | 'http';
   ref: { mid?: string; path?: string; url?: string };  // 取流/下载依据
   file?: string | null;           // 本地化后的文件（相对 mediaDir 或绝对路径）
   sizeBytes?: number | null;
@@ -90,11 +89,11 @@ interface Asset {
 
 ```ts
 interface TrackSource {
-  id: string;                       // 'qqmusic' | 'local' | 'http' | 'netdisk'
+  id: string;                       // 'qqmusic' | 'netease' | 'local' | 'http'
   label: string;                    // 展示名
   capabilities: { search?: boolean; collection?: boolean; stream?: boolean; download?: boolean };
   resolve?(input: string): Promise<OriginRef[]>;        // 链接/ID/路径 → 引用
-  listCollection?(ref: OriginRef): Promise<TrackMeta[]>; // 歌单/网盘目录/本地文件夹
+  listCollection?(ref: OriginRef): Promise<TrackMeta[]>; // 歌单/本地文件夹
   search?(kw: string): Promise<TrackMeta[]>;
   stream?(asset: Asset, session?): Promise<{ url: string; expiresAt: number | null }>;
   download?(asset: Asset, destPath: string): Promise<{ codec?: string; sizeBytes?: number }>;
@@ -105,7 +104,7 @@ interface TrackSource {
 - **`qqmusic`**：现有 SDK（搜索/歌单/直链/下载）。
 - **`local`**：扫描本地/社团文件夹（复用现有 `localscan.ts`）；文件即资产，`source=local`、`rights=club`。
 - **`http`**：直链下载（自建服务器 / 对象存储 / 其他站点直链）。
-- **`netdisk`**（预留）：文档里社团用百度网盘，可接其分享/直链。
+- **百度网盘：不做**（未接入）。
 
 新增来源 = 新增一个适配器 + 注册，核心、播放、缓存、分类都不用改。
 
@@ -115,7 +114,7 @@ interface TrackSource {
 
 **不要把原本的 `source` 直接改成 self**（会丢溯源、无法回滚、无法区分“社团自制”和“随手裁了 5 秒”）。推荐**两层记录**：
 
-- `provenance.origin` **永久保留**最初来源（QQ mid / 原始 URL / 网盘文件）。
+- `provenance.origin` **永久保留**最初来源（QQ mid / 原始 URL / 本地路径）。
 - 一旦产生编辑版：
   - 新增 `Asset{ kind:'edited', source:'local', derivedFromAssetId:<原资产> }`；
   - 设 `provenance.edited = true`；
@@ -181,7 +180,7 @@ GET /api/track/:id/stream
 
 ## 10. 待决问题
 
-1. **“再添加一个下载来源”具体指哪个？** 本地/社团文件夹、自建服务器直链、还是百度网盘？（决定 P2 先做哪个适配器。）
+1. **（已定）新增的下载来源**：网易云音乐 + 本地/社团文件夹 + 自建服务器直链；**百度网盘不做**。
 2. 剪辑版是**替换**原曲目的默认播放，还是作为**同一曲目的另一个版本**在 UI 上可选？（推荐后者。）
 3. 是否需要**导出“自有曲库清单”**（含来源/归属），作为社团资产台账？
 4. 归属切换是否需要**权限/审批**（谁能标「自制」）？
@@ -191,7 +190,7 @@ GET /api/track/:id/stream
 ## 11. 决策与实施状态（2026-10）
 
 **已拍板**
-- **来源全都要**：`qqmusic`（已有）+ `netease`（网易云，已实现）+ `local`（本地/社团文件夹，已实现）+ `http`（自建服务器直链，已实现）+ `pan`（百度网盘，已实现待验证）。
+- **来源**：`qqmusic`（已有）+ `netease`（网易云，已实现）+ `local`（本地/社团文件夹，已实现）+ `http`（自建服务器直链，已实现）。**百度网盘不做**。
 - **剪辑版不做「多版本可选」**：编辑过的文件就是该曲目的**默认（唯一）播放资产**，不再提供「原版/剪辑版」切换；`provenance.origin` 仍作为**元数据**保留用于溯源。
 - **不做**「自有曲库清单/资产台账」导出。
 - **标「自制」不需要权限/审批**：任何人可直接改归属。
@@ -203,15 +202,14 @@ GET /api/track/:id/stream
 | 网易云 | `POST /api/source/netease/import`、`GET /api/search/netease` | ✅ | ✅ 歌单/单曲 | ✅（部分歌需 Cookie） | **已实测**（匿名可播放部分歌；`neteaseCookie` 提升成功率） |
 | 本地/社团文件夹 | `POST /api/source/local/import` | — | ✅ 扫描入库（文件原位） | ✅ 绝对路径直接流 | **已实测** |
 | 自建直链 | `POST /api/source/http/import` | — | ✅ URL 列表 | ✅ 302 + 下载转 mp3 | **已实测** |
-| 百度网盘 | `POST /api/source/pan/import` | — | ✅ 分享链接→列目录 | ✅ 播放时解析 dlink | **已实现，待 BDUSS Cookie 验证** |
 | 来源列表 | `GET /api/sources` | — | — | — | 已实测 |
 
 **登录/Cookie（`PUT /api/settings`）**：`neteaseCookie`（MUSIC_U）、`baiduCookie`（BDUSS;STOKEN）。
 
 **来源注册表（已实现）**：`packages/dance-backend/src/sources/registry.ts` 定义统一 `SourceDef`（`id/label/kind/authed/search/build/streamUrl`）；`GET /api/sources` 由注册表驱动；导入/搜索走通用路由 **`POST /api/source/:id/import`** 与 **`GET /api/source/:id/search`**；播放直链走各来源的 `streamUrl`（QQ/本地由后端其它逻辑处理）。新增来源 = 在注册表加一个 `SourceDef`，核心无需改动。
 
-**前端（已做）**：搜索页可切 QQ/网易云并一键「+ 加入曲库」；「导入来源」页含 QQ/网易云/本地文件夹/直链/网盘 五种入口；曲目行显示**来源 chip**；设置里可填 `neteaseCookie`/`baiduCookie`。
+**前端（已做）**：搜索页可切 QQ/网易云并一键「+ 加入曲库」；「导入来源」页含 QQ/网易云/本地文件夹/直链 四种入口；曲目行显示**来源 chip**；设置里可填 `neteaseCookie`。
 
 **模型（已升级 schema v2）**：曲库存储由 `data/library.json` 迁移为 **`data/tracks.json`**（`{schemaVersion:2, collections}`）；每首 Track 含 `provenance`（`rights: external|club`、`edited`、`origin` 溯源）与 `assets[]` + `primaryAssetId`，并与原扁平字段并存以兼容。归属/是否编辑过可在编辑弹窗修改。
 
-**尚未做**：百度网盘分享链路的实机验证（需 BDUSS Cookie）；`/api/library/import` 老接口的收编（QQ 歌单已可用通用 `/api/source/qqmusic/import`）。
+**尚未做**：`/api/library/import` 老接口的收编（QQ 歌单已可用通用 `/api/source/qqmusic/import`）。

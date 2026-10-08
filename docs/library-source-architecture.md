@@ -208,4 +208,6 @@ GET /api/track/:id/stream
 
 **登录/Cookie（`PUT /api/settings`）**：`neteaseCookie`（MUSIC_U）、`baiduCookie`（BDUSS;STOKEN）。
 
-**尚未做**：前端「来源选择/来源 chip/各来源导入表单」（当前后端接口已可用）；DB 从 `library.json` 升级为 `Track+Asset` 的正式迁移（现以 `source`/`url` 字段轻量承载）。
+**前端（已做）**：搜索页可切 QQ/网易云并一键「+ 加入曲库」；「导入来源」页含 QQ/网易云/本地文件夹/直链/网盘 五种入口；曲目行显示**来源 chip**；设置里可填 `neteaseCookie`/`baiduCookie`。
+
+**尚未做**：百度网盘分享链路的实机验证（需 BDUSS Cookie）；DB 从 `library.json` 升级为 `Track+Asset` 的正式迁移（现以 `source`/`url` 字段轻量承载）。

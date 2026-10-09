@@ -138,6 +138,7 @@ export default function App() {
   const [searchSource, setSearchSource] = useState<'all' | 'qqmusic' | 'netease'>('all');
   const [addType, setAddType] = useState('未分类');
   const [sourceFilter, setSourceFilter] = useState('all');
+  const [libPage, setLibPage] = useState(0);
   const [importSource, setImportSource] = useState<'qqmusic' | 'netease' | 'local' | 'http'>('qqmusic');
   const [neInput, setNeInput] = useState('');
   const [localDir, setLocalDir] = useState('');
@@ -387,6 +388,9 @@ export default function App() {
   useEffect(() => {
     if (activeType) loadSongs(activeType);
   }, [activeType]);
+  useEffect(() => {
+    setLibPage(0);
+  }, [activeType, sourceFilter]);
   useEffect(() => {
     if (activeTab === 'status') loadStatus();
     if (activeTab === 'requests') loadRequests();
@@ -833,6 +837,9 @@ export default function App() {
     () => (sourceFilter === 'all' ? songs : songs.filter((s) => (s.source || 'qqmusic') === sourceFilter)),
     [songs, sourceFilter],
   );
+  const LIB_PAGE = 50;
+  const libPageCount = Math.max(1, Math.ceil(libSongs.length / LIB_PAGE));
+  const libPageSongs = useMemo(() => libSongs.slice(libPage * LIB_PAGE, libPage * LIB_PAGE + LIB_PAGE), [libSongs, libPage]);
   const orderArr = useMemo(() => orderText.split(/[\s,，、→>/-]+/).filter(Boolean), [orderText]);
 
   function SongRow({ s, list, onAdd, onDownload, onClip }: { s: LibrarySong | Song; list: Array<LibrarySong | Song>; onAdd?: () => void; onDownload?: () => void; onClip?: () => void }) {
@@ -975,11 +982,26 @@ export default function App() {
                 </div>
               </div>
               {libSongs.length ? (
-                <div className="songlist">
-                  {libSongs.map((s) => (
-                    <SongRow key={s.mid} s={s} list={libSongs} />
-                  ))}
-                </div>
+                <>
+                  <div className="songlist">
+                    {libPageSongs.map((s) => (
+                      <SongRow key={s.mid} s={s} list={libSongs} />
+                    ))}
+                  </div>
+                  {libPageCount > 1 ? (
+                    <div className="pager">
+                      <Button size="small" disabled={libPage <= 0} onClick={() => setLibPage((p) => Math.max(0, p - 1))}>
+                        上一页
+                      </Button>
+                      <span className="hint">
+                        第 {libPage + 1} / {libPageCount} 页（每页 {LIB_PAGE}）
+                      </span>
+                      <Button size="small" disabled={libPage >= libPageCount - 1} onClick={() => setLibPage((p) => Math.min(libPageCount - 1, p + 1))}>
+                        下一页
+                      </Button>
+                    </div>
+                  ) : null}
+                </>
               ) : (
                 <div className="empty">
                   <div className="empty-ico">

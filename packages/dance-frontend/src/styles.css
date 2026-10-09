@@ -360,6 +360,13 @@ body {
   padding: 14px 16px;
   box-shadow: var(--shadow-sm);
 }
+.pager {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: center;
+  padding: 12px 0 4px;
+}
 .sc-title {
   font-size: 12px;
   letter-spacing: 1px;

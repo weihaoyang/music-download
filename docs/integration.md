@@ -147,7 +147,27 @@ await media.ensureFromUrl(tracks[0].url!, tracks[0].id);
 
 ---
 
-## 七、常见问题
+## 七、一键启动 / Docker
+
+**Windows 一键启动**（按需构建 + 起后端 + 起客户端镜像）：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\start.ps1
+```
+
+**Docker**（后端 + 前端静态产物；镜像内已装 ffmpeg）：
+
+```bash
+docker compose up -d --build
+# 打开 http://127.0.0.1:8790/
+```
+
+- **客户端镜像（8899）无法进容器**（需要真机的 QQ 音乐客户端）。容器里请在 `packages/dance-backend/config.json` 把 `bridgeUrl` 改成 `http://host.docker.internal:8899/cookie`（compose 已加 `host.docker.internal` 映射）。
+- 数据落在 `dance-data` 卷（`dataDir/mediaDir`）。`config.json` 由宿主机挂载进容器。
+
+---
+
+## 八、常见问题
 
 - **播放 401 / 导入失败**：客户端镜像掉线（或 cookie 过期）——重启 `bridge.py`，确认 QQ 客户端在运行。
 - **网易云无直链 / 只下到 30 秒**：匿名时多数歌只返回**试听片段**，舞曲台会**自动拒绝**该片段（不缓存、不计入曲库），设置里填 `neteaseCookie`（`MUSIC_U=...`，最好是会员）即可下载完整音频。搜索/导入不受影响。

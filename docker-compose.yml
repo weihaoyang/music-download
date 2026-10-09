@@ -1,0 +1,17 @@
+services:
+  backend:
+    build: .
+    ports:
+      - '8790:8790'
+    volumes:
+      # 配置（本机改好后挂进去）；dataDir/mediaDir 都在 data 卷里
+      - ./packages/dance-backend/config.json:/app/packages/dance-backend/config.json
+      - dance-data:/app/packages/dance-backend/data
+    # 若要连宿主机的 QQ 客户端镜像（bridge 跑在宿主机 8899），把 config.json 的 bridgeUrl
+    # 改成 http://host.docker.internal:8899/cookie
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    restart: unless-stopped
+
+volumes:
+  dance-data:

@@ -1,0 +1,9 @@
+node_modules
+**/node_modules
+packages/*/dist
+packages/dance-backend/data
+data
+.git
+docs
+*.log
+config.json

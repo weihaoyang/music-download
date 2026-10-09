@@ -766,3 +766,11 @@ D:\music-download\
 - **后端瘦身**：`dance-backend` 改为依赖 `@hdbc/dance-sdk`（`file:../dance-sdk`）；删除内联的 `classifier.ts / localscan.ts / media.ts / sources/`；`server.ts` 通过 SDK 调用（`createSourceRegistry({ qqAnonymous: () => pool.anonymous(), qqLibrary: () => pool.libraryClient() })`）。脚本改为从 SDK `require`。
 - **自建服务器「整库清单」**：`http` 来源新增 `{ manifestUrl }`，一次**收编服务器上的全部音频为完整曲库**：清单支持 `{base, files[]}` / `string[]` / `{urls[]}`；相对 `url` 按 `base`（或清单所在目录）解析；`name` 按《HBDC 规则》命名即可自动归舞种。示例：`packages/dance-backend/public/manifest.example.json`。
 - **实测**：SDK 构建 OK；backend 构建 OK；`smoke-v6` **27/27**、`smoke-v7` **13/13**；`manifestUrl` 导入 2 项 → 自动归入「平四/慢三」→ 清理成功。
+
+## 37. 播放历史 + 播放次数 + SQLite 单曲增量写（✅ 已完成并实测）
+
+- **单曲增量写（性能）**：曲库改用 SQLite 后，`markPlayed` / `setFile` / `updateSong` / `removeSong` 原本都会触发**全表重写**；其中 `markPlayed` 在每次 `/api/song/stream`（本地播放会发多次 Range 请求）都被调用，代价被放大。新增 `saveSong()`（`INSERT ... ON CONFLICT(mid) DO UPDATE`，只写一行）与 `deleteSongRow()`，并把上述路径切过去；JSON 回退时仍全量写。
+- **播放次数 + 去抖**：`LibrarySong.playCount`；`markPlayed` 在 8 秒内重复调用自动忽略，返回是否真正记了一次，避免同一首播放期间反复写库。
+- **播放历史**：新增 `HistoryStore`（`data/history.json`，新在前，最多 500 条）。`/api/song/stream` 命中曲目即记录一次 `{mid,name,artists,type,coverUrl,at}`（去抖后）。接口：`GET /api/history?limit=`（公开）、`DELETE /api/history`（admin）。
+- **前端**：曲库行新增「已播 N」标签；「状态」Tab 新增「最近播放」列表（舞种 / 歌名 / 歌手 / 时间 + 刷新 / 清空）。
+- **实测**：对已缓存曲连续两次取流 → 历史仅 1 条、`playCount=1`（去抖生效）；重启后历史与 `playCount` 均持久（SQLite）；editor 清空历史 403、admin 可清；`smoke-v6` **27/27**、`smoke-v7` **14/14**；状态页渲染「最近播放（N）」，无 console 报错。

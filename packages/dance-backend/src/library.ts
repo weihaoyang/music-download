@@ -57,6 +57,8 @@ export interface LibrarySong {
   sizeBytes?: number | null;
   /** 最近一次播放时间（用于 LRU 淘汰） */
   playedAt?: number | null;
+  /** 累计播放次数 */
+  playCount?: number;
   /** 是否属于「我喜欢」合集（稳定保留，识别舞种不会移出） */
   liked?: boolean;
   /** 来源：'qqmusic' | 'netease' | 'local' | 'http' | 'pan'（默认 qqmusic） */
@@ -193,6 +195,34 @@ export class LibraryStore {
       return Promise.resolve();
     }
     return writeJson(this.file, { schemaVersion: 2, collections: this.data } as LibraryDoc);
+  }
+
+  /** 单曲增量写：SQLite 用 UPSERT 只写一行（避免全表重写）；JSON 回退全量 */
+  private saveSong(song: LibrarySong): Promise<void> {
+    if (this.db) {
+      try {
+        this.db
+          .prepare('INSERT INTO tracks (mid, type, data) VALUES (?, ?, ?) ON CONFLICT(mid) DO UPDATE SET type = excluded.type, data = excluded.data')
+          .run(song.mid, song.type, JSON.stringify(song));
+        return Promise.resolve();
+      } catch {
+        return this.save();
+      }
+    }
+    return this.save();
+  }
+
+  /** 单曲删除：SQLite 只删一行 */
+  private deleteSongRow(mid: string): Promise<void> {
+    if (this.db) {
+      try {
+        this.db.prepare('DELETE FROM tracks WHERE mid = ?').run(mid);
+        return Promise.resolve();
+      } catch {
+        return this.save();
+      }
+    }
+    return this.save();
   }
 
   types(): Array<{ type: string; count: number; cached: number }> {
@@ -371,16 +401,20 @@ export class LibraryStore {
       if (typeof sizeBytes === 'number') asset.sizeBytes = sizeBytes;
       else if (!file) asset.sizeBytes = null;
     }
-    await this.save();
+    await this.saveSong(hit.song);
     return true;
   }
 
-  /** 标记最近播放时间（LRU 用） */
-  async markPlayed(mid: string): Promise<void> {
+  /** 标记最近播放时间（LRU 用）并累计播放次数；同一首播放期间的重复请求去抖，避免多次写库。返回是否真的记了一次（供调用方决定是否追加历史） */
+  async markPlayed(mid: string): Promise<boolean> {
     const hit = this.findByMid(mid);
-    if (!hit) return;
-    hit.song.playedAt = Date.now();
-    await this.save();
+    if (!hit) return false;
+    const now = Date.now();
+    if (hit.song.playedAt && now - hit.song.playedAt < 8000) return false;
+    hit.song.playedAt = now;
+    hit.song.playCount = (hit.song.playCount ?? 0) + 1;
+    await this.saveSong(hit.song);
+    return true;
   }
 
   /** 编辑歌曲元数据（可改舞种，改舞种时移动到对应列表） */
@@ -425,7 +459,7 @@ export class LibraryStore {
       song.type = patch.type;
       to.push(song);
     }
-    await this.save();
+    await this.saveSong(song);
     return song;
   }
 
@@ -436,7 +470,7 @@ export class LibraryStore {
     const list = this.data[hit.type] ?? [];
     const idx = list.indexOf(hit.song);
     if (idx >= 0) list.splice(idx, 1);
-    await this.save();
+    await this.deleteSongRow(mid);
     return true;
   }
 

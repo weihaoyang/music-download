@@ -14,6 +14,7 @@ import { TaskStore } from './tasks';
 import { SetlistStore, generateSetlist, checkSetlist, type EventMeta } from './setlist';
 import { SettingsStore } from './settings';
 import { RequestStore } from './requests';
+import { HistoryStore } from './history';
 import { analyze, MediaCache, createSourceRegistry, scanDanceDir, coreName, localMid, extractCover, probeLoudness, clipAudio, probeDurationMs, netease, type TrackMeta } from '@hdbc/dance-sdk';
 import { sendJson, readBody, parseCookies, setCookie, clearCookie } from './http';
 
@@ -79,6 +80,7 @@ export function createServer(cfg: BackendConfig) {
   const setlists = new SetlistStore(path.join(cfg.dataDir, 'setlists.json'));
   const settings = new SettingsStore(path.join(cfg.dataDir, 'settings.json'));
   const requests = new RequestStore(path.join(cfg.dataDir, 'requests.json'));
+  const history = new HistoryStore(path.join(cfg.dataDir, 'history.json'));
   const tasks = new TaskStore();
   const pool = new ClientPool(cfg.bridgeUrl, cfg.logger);
   const sources = createSourceRegistry({ qqAnonymous: () => pool.anonymous(), qqLibrary: () => pool.libraryClient() });
@@ -118,7 +120,7 @@ export function createServer(cfg: BackendConfig) {
     return library.list(type);
   }
 
-  const ready = Promise.all([sessions.load(), library.load(), setlists.load(), settings.load(), requests.load()]).then(() => {
+  const ready = Promise.all([sessions.load(), library.load(), setlists.load(), settings.load(), requests.load(), history.load()]).then(() => {
     const e = eff();
     media = new MediaCache(e.mediaDir, e.mediaQuality, e.downloadConcurrency, cfg.logger);
     netease.setNeteaseCookie(e.neteaseCookie);
@@ -441,6 +443,17 @@ export function createServer(cfg: BackendConfig) {
         if (!ok) return sendJson(res, 404, { ok: false, error: 'not found' });
         return sendJson(res, 200, { ok: true, stats: requests.stats() });
       }
+    }
+
+    /* ------------------------------ 播放历史 ------------------------------ */
+    if (p === '/api/history' && method === 'GET') {
+      const limit = Math.min(500, Math.max(1, Number(url.searchParams.get('limit')) || 100));
+      return sendJson(res, 200, { ok: true, data: history.list(limit) });
+    }
+    if (p === '/api/history' && method === 'DELETE') {
+      if (!isAdmin) return sendJson(res, 403, { ok: false, error: 'forbidden' });
+      await history.clear();
+      return sendJson(res, 200, { ok: true });
     }
 
     /* ------------------------------ 运行时设置 ------------------------------ */
@@ -917,8 +930,14 @@ export function createServer(cfg: BackendConfig) {
       const mid = url.searchParams.get('mid') || '';
       const quality = (url.searchParams.get('quality') || eff().mediaQuality) as Quality;
       const hit = library.findByMid(mid);
+      // 记录播放（LRU 时间戳 + 播放次数 + 历史）；同一首播放期间的重复请求由 store 去抖
+      if (hit) {
+        void library.markPlayed(mid).then((recorded) => {
+          if (recorded) return history.add({ mid, name: hit.song.name, artists: hit.song.artists || [], type: hit.song.type, coverUrl: hit.song.coverUrl ?? null, at: Date.now() });
+          return undefined;
+        });
+      }
       if (hit?.song.file && (await media.exists(hit.song.file))) {
-        void library.markPlayed(mid);
         const local = hit.song.file;
         if (path.isAbsolute(local)) {
           if (streamFile(req, res, local, MIME[path.extname(local).toLowerCase()] ?? 'audio/mpeg')) return;

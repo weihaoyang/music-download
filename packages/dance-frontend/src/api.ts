@@ -117,6 +117,8 @@ export interface LibrarySong {
   provenance?: { rights: 'external' | 'club'; edited: boolean; origin?: unknown; note?: string | null } | null;
   /** 建议人工复核 */
   needsReview?: boolean | null;
+  /** 累计播放次数 */
+  playCount?: number;
 }
 
 export interface Song {

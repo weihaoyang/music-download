@@ -160,6 +160,7 @@ export default function App() {
   const [generating, setGenerating] = useState(false);
   const [genIssues, setGenIssues] = useState<GenIssue[]>([]);
   const [status, setStatus] = useState<any>(null);
+  const [history, setHistory] = useState<Array<{ mid: string; name: string; artists: string[]; type: string; coverUrl?: string | null; at: number }>>([]);
   const [dups, setDups] = useState<Array<Array<{ mid: string; name: string; artists: string[]; type: string; source: string; file: boolean; durationMs: number }>> | null>(null);
   const [dupOpen, setDupOpen] = useState(false);
   const [clipOpen, setClipOpen] = useState(false);
@@ -231,6 +232,20 @@ export default function App() {
   }
   function loadStatus() {
     api('/api/status').then((r) => setStatus(r as unknown)).catch(() => {});
+  }
+  function loadHistory() {
+    api<{ data: typeof history }>('/api/history?limit=200')
+      .then((r) => setHistory(r.data || []))
+      .catch(() => {});
+  }
+  function clearHistory() {
+    setAdminToken(adminTokenState);
+    adminFetch('/api/history', 'DELETE')
+      .then(() => {
+        setHistory([]);
+        Toast.success('已清空播放历史');
+      })
+      .catch((e) => Toast.error('清空失败：' + e.message));
   }
   function loadRequests() {
     api<{ data: typeof reqs; stats: typeof reqStats }>('/api/requests')
@@ -398,6 +413,7 @@ export default function App() {
   }, [activeType, sourceFilter]);
   useEffect(() => {
     if (activeTab === 'status') loadStatus();
+    if (activeTab === 'status') loadHistory();
     if (activeTab === 'requests') loadRequests();
   }, [activeTab]);
   useEffect(() => {
@@ -905,6 +921,7 @@ export default function App() {
           {isLib && lib.suitable === false ? <span className="chip chip-warn" title={lib.warning || '节奏不稳，可能不适合作为舞曲'}>不适合舞曲</span> : null}
           {isLib && lib.needsReview ? <span className="chip chip-review" title="识别置信度低 / 贴近速度边界 / 拍号不明确，建议人工复核">需复核</span> : null}
           {isLib && lib.file ? <span className="chip chip-green">已缓存</span> : null}
+          {isLib && lib.playCount ? <span className="chip chip-mid" title={'累计播放 ' + lib.playCount + ' 次'}>已播 {lib.playCount}</span> : null}
           {isLib && lib.bpm ? <span className="bpm">{lib.bpm} BPM</span> : null}
           {s.durationMs ? <span className="bpm">{mmss(s.durationMs)}</span> : null}
         </div>
@@ -1482,6 +1499,31 @@ export default function App() {
                 </div>
               ) : (
                 <div className="empty">加载中…</div>
+              )}
+              <div className="panel-head" style={{ marginTop: 18 }}>
+                <span className="panel-title">最近播放（{history.length}）</span>
+                <div className="panel-actions">
+                  <Button size="small" onClick={loadHistory}>
+                    刷新
+                  </Button>
+                  <Button size="small" type="danger" onClick={clearHistory}>
+                    清空
+                  </Button>
+                </div>
+              </div>
+              {history.length ? (
+                <div className="history-list">
+                  {history.map((h, i) => (
+                    <div className="history-row" key={h.mid + '-' + h.at + '-' + i}>
+                      <span className="chip chip-gold">{h.type}</span>
+                      <span className="history-name">{h.name}</span>
+                      <span className="history-artist">{(h.artists || []).join(' / ')}</span>
+                      <span className="history-time">{new Date(h.at).toLocaleTimeString()}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="empty">暂无播放记录</div>
               )}
             </div>
           </TabPane>

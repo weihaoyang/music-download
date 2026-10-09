@@ -1409,3 +1409,121 @@ body {
   border-radius: 999px;
   padding: 0.12em 0.85em;
 }
+
+/* ============================ 移动端适配 ============================ */
+@media (max-width: 720px) {
+  .topbar {
+    gap: 10px;
+    padding: 10px 14px;
+    flex-wrap: wrap;
+  }
+  .brand {
+    font-size: 17px;
+    letter-spacing: 1px;
+  }
+  .brand-mark {
+    width: 26px;
+    height: 26px;
+  }
+  .user-chip {
+    max-width: 48vw;
+  }
+  .user-chip > span:not(.avatar) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .content {
+    padding: 16px 12px 90px;
+  }
+  .panel {
+    padding: 14px 12px;
+    border-radius: 12px;
+  }
+  .panel-head {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .panel-actions {
+    margin-left: 0;
+    width: 100%;
+    gap: 8px;
+  }
+  .panel-actions .semi-input-wrapper,
+  .panel-actions .semi-select {
+    flex: 1 1 140px;
+    width: auto !important;
+  }
+
+  /* 曲目行：改为两行（封面+标题 / 标签 + 操作） */
+  .song {
+    grid-template-columns: 44px minmax(0, 1fr);
+    gap: 10px;
+    padding: 10px 8px;
+  }
+  .song-cover {
+    width: 44px;
+    height: 44px;
+    grid-row: 1 / 3;
+  }
+  .song-main {
+    grid-column: 2;
+  }
+  .song-meta {
+    grid-column: 2;
+    justify-content: flex-start;
+  }
+  .song-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+
+  /* 点歌：队列与二维码纵向排列 */
+  .req-wrap {
+    flex-direction: column;
+  }
+  .req-qr {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  /* Tabs 横向可滚动，避免挤成多行 */
+  .semi-tabs-bar {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+  }
+  .semi-tabs-bar .semi-tabs-tab {
+    flex: none;
+  }
+
+  /* 设置弹窗占满窄屏，控件自适应宽度 */
+  .semi-modal {
+    width: 94vw !important;
+    max-width: 94vw;
+  }
+  .settings-form .field .semi-select,
+  .settings-form .field .semi-input-wrapper,
+  .settings-form .field .semi-input-number {
+    width: 100% !important;
+  }
+
+  .status-grid,
+  .stat-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 420px) {
+  .panel-actions .semi-input-wrapper,
+  .panel-actions .semi-select {
+    flex: 1 1 100%;
+  }
+  .song-actions .semi-button,
+  .song-actions button {
+    min-width: 34px;
+  }
+}
+

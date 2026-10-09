@@ -1072,18 +1072,31 @@ body {
   color: rgba(26, 58, 95, 0.55);
 }
 .wall-lyric {
-  margin-top: 4.5vh;
-  min-height: 9vh;
+  margin-top: 3.6vh;
+  min-height: 20vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.7vh;
+  overflow: hidden;
 }
-.wall-lyric .cur {
-  font-size: 2.05vw;
+.wall-lyric .ly {
+  transition: opacity 0.4s ease, transform 0.4s ease, font-size 0.3s ease, color 0.4s ease;
+  line-height: 1.25;
+}
+.wall-lyric .ly.far {
+  font-size: 1.2vw;
+  color: rgba(26, 58, 95, 0.3);
+}
+.wall-lyric .ly.near {
+  font-size: 1.55vw;
+  color: rgba(26, 58, 95, 0.5);
+}
+.wall-lyric .ly.cur {
+  font-size: 2.15vw;
   font-weight: 600;
-  transition: opacity 0.3s;
-}
-.wall-lyric .next {
-  margin-top: 1vh;
-  font-size: 1.35vw;
-  color: rgba(26, 58, 95, 0.4);
+  color: var(--ink);
+  text-shadow: 0 1px 14px rgba(197, 160, 89, 0.28);
 }
 .wall-next {
   align-self: stretch;

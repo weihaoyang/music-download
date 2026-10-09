@@ -256,8 +256,11 @@ export default function WallApp() {
   }
 
   const pct = dur > 0 ? Math.min(100, (pos / dur) * 100) : 0;
-  const curLine = [...lrc].reverse().find((l) => l.t <= pos + 0.15);
-  const nextLine = lrc.find((l) => l.t > pos + 0.15);
+  // 当前歌词行索引 + 展示窗口（前后若干行）
+  let curIdx = -1;
+  for (let i = 0; i < lrc.length; i++) if (lrc[i].t <= pos + 0.15) curIdx = i;
+  const winStart = Math.max(0, curIdx - 2);
+  const win = lrc.slice(winStart, winStart + 6);
   const upcoming = items.slice(idx + 1, idx + 7);
   const accent = typeColor(cur?.type);
   const reqText = reqs.length ? reqs.map((r) => r.name + (r.status === 'accepted' ? '✓' : '')).join('　·　') : '';
@@ -356,8 +359,19 @@ export default function WallApp() {
           </div>
 
           <div className="wall-lyric">
-            <div className="cur">{curLine?.text || ''}</div>
-            <div className="next">{nextLine?.text || ''}</div>
+            {win.length ? (
+              win.map((l, i) => {
+                const gi = winStart + i;
+                const cls = gi === curIdx ? 'cur' : gi === curIdx + 1 ? 'near' : 'far';
+                return (
+                  <div key={gi} className={'ly ' + cls}>
+                    {l.text || ' '}
+                  </div>
+                );
+              })
+            ) : (
+              <div className="ly far">♪ 纯音乐 / 暂无歌词</div>
+            )}
           </div>
         </section>
 

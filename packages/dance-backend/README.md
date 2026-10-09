@@ -66,6 +66,7 @@ node scripts/smoke.js   # 冒烟
 | GET | `/api/playlist/import?url=&limit=` | 拉取外部歌单（归一化歌曲） | 客户端镜像 |
 | POST | `/api/playlist/clone` | 克隆外部歌单到我的歌单 | 用户 |
 | POST | `/api/library/download` | 补齐缺失音频 `{type?, source?}` → `taskId` | admin |
+| POST | `/api/library/download-song` | 单曲下载到本地 `{mid}` → `taskId` | admin |
 | POST | `/api/library/classify` | 自动识别舞种（只处理已缓存音频，跳过人工类型）→ `taskId` | admin |
 | POST | `/api/library/cache-classify` | 批量「缓存 + 分类」：未缓存的先下载 HQ 再识别 → `taskId` | admin |
 | PUT | `/api/library/song` | 改 `name/artists/album/type/suitable/warning/rights/edited` | admin |

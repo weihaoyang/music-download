@@ -200,7 +200,7 @@ export function createServer(cfg: BackendConfig) {
     if (src && src !== 'qqmusic') {
       const u = await resolveExternalUrl(hit!);
       if (!u) throw new QQMusicError('QQ_UNSUPPORTED', `${src} 来源该曲无可用直链`);
-      return media.ensureFromUrl(u, mid);
+      return media.ensureFromUrl(u, mid, { expectedDurationMs: hit!.song.durationMs || 0 });
     }
     const client = await pool.libraryClient();
     return media.ensure(client, mid);
@@ -526,6 +526,15 @@ export function createServer(cfg: BackendConfig) {
       const missing = songs.filter((s) => !s.file).map((s) => s.mid);
       const taskId = await queueDownloads(missing, type || null);
       return sendJson(res, 200, { ok: true, queued: missing.length, taskId });
+    }
+    // 单曲下载到本地（缓存）
+    if (p === '/api/library/download-song' && method === 'POST') {
+      if (!isAdmin) return sendJson(res, 403, { ok: false, error: 'forbidden' });
+      const body = await readBody(req);
+      const mid = String(body.mid || '');
+      if (!mid) return sendJson(res, 400, { ok: false, error: 'mid required' });
+      const taskId = await queueDownloads([mid], null);
+      return sendJson(res, 200, { ok: true, queued: 1, taskId });
     }
     // 按来源清空曲库（可顺带删除缓存文件；绝不删用户本地文件）
     if (p === '/api/library/delete-by-source' && method === 'POST') {

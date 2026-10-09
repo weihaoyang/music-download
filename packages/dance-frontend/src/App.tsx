@@ -72,6 +72,11 @@ const IPlus = () => (
     <path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z" />
   </svg>
 );
+const IDownload = () => (
+  <svg viewBox="0 0 24 24">
+    <path d="M11 3h2v8h3.5L12 15.5 7.5 11H11V3zM5 19h14v2H5z" />
+  </svg>
+);
 const SOURCE_LABELS: Record<string, string> = {
   qqmusic: 'QQ音乐',
   netease: '网易云',
@@ -475,6 +480,21 @@ export default function App() {
       })
       .catch((e) => Toast.error('加入失败：' + e.message));
   }
+  function downloadSearchResult(s: Song) {
+    setAdminToken(adminTokenState);
+    const req =
+      searchSource === 'netease'
+        ? adminFetch<{ added: number }>('/api/source/netease/import', 'POST', { type: addType, input: 'https://music.163.com/song?id=' + s.mid })
+        : adminFetch<{ added: number }>('/api/source/qqmusic/import', 'POST', { type: addType, songMid: s.mid });
+    req
+      .then(() => adminFetch<{ taskId: string; queued: number }>('/api/library/download-song', 'POST', { mid: s.mid }))
+      .then((r) => {
+        Toast.info(`开始下载「${s.name}」到本地…`);
+        loadTypes();
+        if (r.taskId) api<{ data: TaskItem }>('/api/tasks/' + r.taskId).then((t) => setTask(t.data)).catch(() => {});
+      })
+      .catch((e) => Toast.error('下载失败：' + e.message));
+  }
   function doImport() {
     if (!importUrl.trim()) return;
     setLoadingImport(true);
@@ -685,7 +705,7 @@ export default function App() {
   );
   const orderArr = useMemo(() => orderText.split(/[\s,，、→>/-]+/).filter(Boolean), [orderText]);
 
-  function SongRow({ s, list, onAdd }: { s: LibrarySong | Song; list: Array<LibrarySong | Song>; onAdd?: () => void }) {
+  function SongRow({ s, list, onAdd, onDownload }: { s: LibrarySong | Song; list: Array<LibrarySong | Song>; onAdd?: () => void; onDownload?: () => void }) {
     const isLib = 'type' in s;
     const lib = s as LibrarySong;
     return (
@@ -723,6 +743,11 @@ export default function App() {
           {onAdd ? (
             <IconBtn title="加入曲库" onClick={onAdd}>
               <IPlus />
+            </IconBtn>
+          ) : null}
+          {onDownload ? (
+            <IconBtn title="下载到本地" onClick={onDownload}>
+              <IDownload />
             </IconBtn>
           ) : null}
           {isLib ? (
@@ -847,7 +872,7 @@ export default function App() {
               {results.length ? (
                 <div className="songlist">
                   {results.map((s) => (
-                    <SongRow key={s.mid} s={s} list={results} onAdd={() => addSearchResult(s)} />
+                    <SongRow key={s.mid} s={s} list={results} onAdd={() => addSearchResult(s)} onDownload={() => downloadSearchResult(s)} />
                   ))}
                 </div>
               ) : (

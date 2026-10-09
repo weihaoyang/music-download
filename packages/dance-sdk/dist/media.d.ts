@@ -30,8 +30,12 @@ export declare class MediaCache {
     private ensureFile;
     /** QQ 音乐：确保本地有该歌曲的音频（统一 mp3） */
     ensure(client: QQMusicClient, mid: string): Promise<string>;
-    /** 任意直链（网易云 / HTTP 来源）：下载到本地并转 mp3 */
-    ensureFromUrl(url: string, mid: string): Promise<string>;
+    /** 任意直链（网易云 / HTTP 来源）：下载到本地并转 mp3；给 expectedDurationMs 时拒绝试听片段 */
+    ensureFromUrl(url: string, mid: string, opts?: {
+        expectedDurationMs?: number;
+    }): Promise<string>;
+    /** 用 ffprobe 读音频时长（毫秒），失败返回 0 */
+    private probeDurationMs;
     /** 把下载到的文件归一化为 mp3：已是 mp3 直接改名；否则 ffmpeg 转码。 */
     private normalizeToMp3;
     private probeCodec;

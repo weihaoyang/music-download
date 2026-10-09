@@ -111,12 +111,30 @@ export class MediaCache {
     });
   }
 
-  /** 任意直链（网易云 / HTTP 来源）：下载到本地并转 mp3 */
-  ensureFromUrl(url: string, mid: string): Promise<string> {
+  /** 任意直链（网易云 / HTTP 来源）：下载到本地并转 mp3；给 expectedDurationMs 时拒绝试听片段 */
+  ensureFromUrl(url: string, mid: string, opts: { expectedDurationMs?: number } = {}): Promise<string> {
     return this.ensureFile(mid, async (tmp) => {
       const r = await fetch(url);
       if (!r.ok) throw new Error(`下载失败 HTTP ${r.status}`);
       await fs.writeFile(tmp, Buffer.from(await r.arrayBuffer()));
+      if (opts.expectedDurationMs && opts.expectedDurationMs > 0) {
+        const dur = await this.probeDurationMs(tmp);
+        if (dur > 0 && dur < opts.expectedDurationMs * 0.7) {
+          await fs.rm(tmp, { force: true }).catch(() => undefined);
+          throw new Error(`返回的是试听片段（${Math.round(dur / 1000)}s < 完整 ${Math.round(opts.expectedDurationMs / 1000)}s），需登录 Cookie/会员`);
+        }
+      }
+    });
+  }
+
+  /** 用 ffprobe 读音频时长（毫秒），失败返回 0 */
+  private probeDurationMs(file: string): Promise<number> {
+    return new Promise((resolve) => {
+      const p = spawn(ffprobePath, ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', file], { windowsHide: true });
+      let out = '';
+      p.stdout.on('data', (d: Buffer) => (out += d.toString()));
+      p.on('error', () => resolve(0));
+      p.on('close', () => resolve(Math.round((parseFloat(out.trim()) || 0) * 1000)));
     });
   }
 

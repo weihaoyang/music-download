@@ -111,6 +111,8 @@ export function createServer(cfg: BackendConfig) {
   }
 
   let media = new MediaCache(cfg.mediaDir, cfg.mediaQuality, cfg.downloadConcurrency, cfg.logger);
+  // 大屏「当前队列」：控制台可推送，已打开的大屏轮询实时跟随
+  let wallQueue: { items: Array<Record<string, unknown>>; index: number; rev: number } | null = null;
   const webDirs = [cfg.webDir, path.join(ROOT, 'public')];
 
   /** 按舞种或特殊合集取值（'__liked__' = 我喜欢） */
@@ -440,6 +442,18 @@ export function createServer(cfg: BackendConfig) {
         tasks: tasks.list().slice(0, 5).map((t) => ({ id: t.id, kind: t.kind, status: t.status, total: t.total, done: t.done, failed: t.failed, error: t.errors ? Object.values(t.errors)[0] : undefined })),
         deps: { ffmpeg: ffmpegAvailable() },
       });
+    }
+
+    /* --------------------------- 大屏队列（实时同步） --------------------------- */
+    if (p === '/api/wall/queue' && method === 'GET') {
+      return sendJson(res, 200, { ok: true, data: wallQueue });
+    }
+    if (p === '/api/wall/queue' && method === 'POST') {
+      if (!canEdit) return sendJson(res, 403, { ok: false, error: 'forbidden' });
+      const body = await readBody(req);
+      const items = Array.isArray(body.items) ? (body.items as Array<Record<string, unknown>>) : [];
+      wallQueue = { items, index: Math.max(0, Number(body.index || 0)), rev: (wallQueue?.rev ?? 0) + 1 };
+      return sendJson(res, 200, { ok: true, rev: wallQueue.rev, count: items.length });
     }
 
     /* --------------------- 点歌（每场 ≤4、每人 ≤1，可在 config 调整） --------------------- */

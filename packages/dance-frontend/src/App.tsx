@@ -567,12 +567,27 @@ export default function App() {
   }, [task, activeType]);
 
   type Playable = { mid: string; name: string; artists: string[]; coverUrl?: string | null; playMs?: number | null; type?: string; durationMs?: number; loudness?: number | null; bpm?: number | null; mood?: string | null };
+  function toQueueItems(songs2: Playable[]) {
+    return songs2.map((s) => ({ mid: s.mid, name: s.name, artists: s.artists, coverUrl: s.coverUrl, playMs: s.playMs ?? null, type: s.type, durationMs: s.durationMs, loudness: s.loudness ?? null, bpm: s.bpm ?? null, mood: s.mood ?? null }));
+  }
   function openPlayer(songs2: Playable[], index = 0, route = '/play') {
-    storeQueue(songs2.map((s) => ({ mid: s.mid, name: s.name, artists: s.artists, coverUrl: s.coverUrl, playMs: s.playMs ?? null, type: s.type, durationMs: s.durationMs, loudness: s.loudness ?? null, bpm: s.bpm ?? null, mood: s.mood ?? null })), index);
+    storeQueue(toQueueItems(songs2), index);
     window.open(route, '_blank');
+  }
+  function pushWallQueue(items: ReturnType<typeof toQueueItems>, index = 0) {
+    setAdminToken(adminTokenState);
+    return adminFetch<{ count: number }>('/api/wall/queue', 'POST', { items, index });
   }
   function openWall(songs2: Playable[]) {
     openPlayer(songs2, 0, '/wall');
+    pushWallQueue(toQueueItems(songs2), 0).catch(() => {});
+  }
+  /** 把当前排曲推送给已打开的大屏（无需重开窗口） */
+  function pushToWall() {
+    if (!gen.length) return Toast.warning('排曲为空');
+    pushWallQueue(toQueueItems(gen), 0)
+      .then((r) => Toast.success(`已推送到大屏（${r.count} 首）`))
+      .catch((e) => Toast.error('推送失败：' + e.message));
   }
   function play(s: LibrarySong | Song, list: Array<LibrarySong | Song>) {
     const lib = list.filter((x): x is LibrarySong => 'type' in x);
@@ -1469,6 +1484,9 @@ export default function App() {
                   </Button>
                   <Button theme="solid" type="tertiary" onClick={() => openWall(gen)} disabled={!gen.length}>
                     大屏播放
+                  </Button>
+                  <Button onClick={pushToWall} disabled={!gen.length}>
+                    推送到大屏
                   </Button>
                   <Button onClick={checkRules} disabled={!gen.length}>
                     规则检查

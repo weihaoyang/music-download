@@ -62,7 +62,7 @@ const RING_C = 2 * Math.PI * RING_R;
 /** 舞会大屏播放（/wall）：howler + anime；切歌自动淡出→切换→淡入 */
 export default function WallApp() {
   const q = getQueue();
-  const items: QueueItem[] = q?.items || [];
+  const [items, setItems] = useState<QueueItem[]>(q?.items || []);
 
   const [idx, setIdx] = useState(q?.index || 0);
   const [playing, setPlaying] = useState(false);
@@ -79,6 +79,8 @@ export default function WallApp() {
   const soundRef = useRef<Howl | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const busyRef = useRef(false);
+  const revRef = useRef(-1);
+  const curMidRef = useRef('');
   const [finished, setFinished] = useState(false);
   const [qr, setQr] = useState('');
   const [reqs, setReqs] = useState<Array<{ id: string; name: string; status: string }>>([]);
@@ -113,6 +115,39 @@ export default function WallApp() {
     };
     load();
     const t = window.setInterval(load, 10000);
+    return () => {
+      alive = false;
+      window.clearInterval(t);
+    };
+  }, []);
+
+  // 记录当前正在播放的曲目 mid（供实时同步时保持不回退）
+  useEffect(() => {
+    curMidRef.current = items[idx]?.mid || '';
+  }, [items, idx]);
+
+  // 实时同步：轮询服务端「大屏队列」，控制台推送后自动跟随（当前曲目仍在队列里则保留）
+  useEffect(() => {
+    let alive = true;
+    const load = () => {
+      fetch('/api/wall/queue')
+        .then((r) => r.json())
+        .then((j) => {
+          if (!alive) return;
+          const d = j?.data as { items?: QueueItem[]; index?: number; rev?: number } | null;
+          if (!d || !Array.isArray(d.items) || !d.items.length) return;
+          if (d.rev === revRef.current) return;
+          revRef.current = d.rev ?? -1;
+          const next = d.items;
+          const playing = curMidRef.current;
+          setItems(next);
+          const found = playing ? next.findIndex((x) => x.mid === playing) : -1;
+          setIdx(found >= 0 ? found : Math.max(0, Math.min(next.length - 1, d.index ?? 0)));
+        })
+        .catch(() => {});
+    };
+    load();
+    const t = window.setInterval(load, 4000);
     return () => {
       alive = false;
       window.clearInterval(t);

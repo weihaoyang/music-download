@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import {
   Avatar,
   Button,
@@ -211,6 +211,8 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [theme, setThemeState] = useState<ThemeMode>(getTheme());
   const [adminTokenState, setAdminTokenState] = useState(getAdminToken());
+  const [restoreMode, setRestoreMode] = useState<'merge' | 'replace'>('merge');
+  const restoreInputRef = useRef<HTMLInputElement | null>(null);
   const [settings, setSettings] = useState<{ mediaDir: string; mediaQuality: string; autoDownload: boolean; cacheLimitBytes: number; autoClassify: boolean; neteaseCookie: string }>({ mediaDir: '', mediaQuality: '320', autoDownload: true, cacheLimitBytes: 20 * 1024 * 1024 * 1024, autoClassify: true, neteaseCookie: '' });
   const [usage, setUsage] = useState<{ bytes: number; files: number; limit: number } | null>(null);
 
@@ -357,6 +359,63 @@ export default function App() {
         setSettingsOpen(false);
       })
       .catch((e) => Toast.error('保存失败：' + e.message));
+  }
+  function exportLibrary() {
+    setAdminToken(adminTokenState);
+    const tk = adminTokenState || getAdminToken();
+    fetch('/api/backup/library', { headers: tk ? { 'x-admin-token': tk } : {} })
+      .then((r) => {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.blob();
+      })
+      .then((blob) => {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'dance-library-' + new Date().toISOString().slice(0, 10) + '.json';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(a.href);
+        Toast.success('已导出曲库备份');
+      })
+      .catch((e) => Toast.error('导出失败：' + e.message));
+  }
+  function pickRestore() {
+    restoreInputRef.current?.click();
+  }
+  function onRestoreFile(e: ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      let collections: unknown;
+      try {
+        const json = JSON.parse(String(reader.result)) as { collections?: unknown };
+        collections = json.collections ?? json;
+      } catch {
+        Toast.error('不是有效的备份 JSON 文件');
+        return;
+      }
+      Modal.confirm({
+        title: restoreMode === 'replace' ? '替换整库？' : '合并导入？',
+        content:
+          restoreMode === 'replace'
+            ? '将清空当前曲库并写入备份内容（磁盘上的音频缓存文件不受影响）。'
+            : '只新增备份里当前曲库没有的曲目，其余保持不变。',
+        okText: '确认',
+        onOk: () => {
+          setAdminToken(adminTokenState);
+          return adminFetch<{ mode: string; replaced?: number; added?: number; skipped?: number }>('/api/restore/library', 'POST', { collections, mode: restoreMode })
+            .then((r) => {
+              Toast.success(restoreMode === 'replace' ? `已恢复：${r.replaced} 首` : `已合并：新增 ${r.added}，跳过 ${r.skipped}`);
+              loadTypes();
+            })
+            .catch((err) => Toast.error('恢复失败：' + err.message));
+        },
+      });
+    };
+    reader.readAsText(f);
   }
   function importLiked() {
     setAdminToken(adminTokenState);
@@ -1766,6 +1825,19 @@ export default function App() {
             保存
           </Button>
           <div className="hint">保存后立即生效；已缓存的旧文件不会自动搬移。</div>
+
+          <div className="divider" />
+          <div className="field-title">曲库备份 / 恢复</div>
+          <div className="hint">导出/恢复整库元数据（不含磁盘上的音频缓存文件）。恢复可选「合并」或「替换」。</div>
+          <div className="panel-actions" style={{ marginTop: 8 }}>
+            <Button onClick={exportLibrary}>导出备份（JSON）</Button>
+            <RadioGroup type="button" value={restoreMode} onChange={(e) => setRestoreMode(e.target.value as 'merge' | 'replace')}>
+              <Radio value="merge">合并</Radio>
+              <Radio value="replace">替换</Radio>
+            </RadioGroup>
+            <Button onClick={pickRestore}>恢复备份…</Button>
+            <input ref={restoreInputRef} type="file" accept="application/json,.json" style={{ display: 'none' }} onChange={onRestoreFile} />
+          </div>
 
           <div className="divider" />
           <div className="field-title">按文件名校准舞种</div>

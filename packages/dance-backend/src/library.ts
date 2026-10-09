@@ -551,4 +551,54 @@ export class LibraryStore {
     if (n) await this.save();
     return n;
   }
+
+  /** 导出全库（schema v2 文档），用于备份 */
+  exportDoc(): LibraryDoc {
+    return { schemaVersion: 2, collections: this.data };
+  }
+
+  /** 用备份**整体替换**曲库（归一化 schema v2 字段，按 mid 去重） */
+  async replaceAll(collections: Record<string, LibrarySong[]>): Promise<number> {
+    const next: Record<string, LibrarySong[]> = {};
+    const seen = new Set<string>();
+    let total = 0;
+    for (const [type, songs] of Object.entries(collections || {})) {
+      if (!Array.isArray(songs)) continue;
+      const arr: LibrarySong[] = [];
+      for (const s of songs) {
+        if (!s || !s.mid || seen.has(s.mid)) continue;
+        seen.add(s.mid);
+        normalizeTrack(s);
+        arr.push(s);
+        total++;
+      }
+      if (arr.length) next[type] = arr;
+    }
+    this.data = next;
+    await this.save();
+    return total;
+  }
+
+  /** **合并**备份：只新增曲库里没有的 mid，返回新增/跳过数 */
+  async mergeCollections(collections: Record<string, LibrarySong[]>): Promise<{ added: number; skipped: number }> {
+    const seen = new Set(this.allSongs().map((s) => s.mid));
+    let added = 0;
+    let skipped = 0;
+    for (const [type, songs] of Object.entries(collections || {})) {
+      if (!Array.isArray(songs)) continue;
+      const arr = this.data[type] ?? (this.data[type] = []);
+      for (const s of songs) {
+        if (!s || !s.mid || seen.has(s.mid)) {
+          skipped++;
+          continue;
+        }
+        seen.add(s.mid);
+        normalizeTrack(s);
+        arr.push(s);
+        added++;
+      }
+    }
+    if (added) await this.save();
+    return { added, skipped };
+  }
 }

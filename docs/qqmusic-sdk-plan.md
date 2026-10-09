@@ -804,3 +804,13 @@ D:\music-download\
   - `package.json` 增加 `test` 脚本（`tsc && node --test dist/test/*.test.js`）。
 - **CI 加固**：`.github/workflows/ci.yml` Node 升到 **24**（与 Docker 一致；后端 `node:sqlite` 需 ≥22.5）；新增 `dance-sdk` 单测步骤；保留 `qqmusic-sdk` 单测 + 三端构建。
 - **实测**：`dance-sdk` **16/16**、`qqmusic-sdk` **12/12**；四个包本地构建均通过。
+
+## 42. 曲库一键备份 / 恢复（✅ 已完成并实测）
+
+- **背景**：曲库 SQLite 化后需要数据安全兜底——把整库**元数据**一键导出/恢复（磁盘上的音频缓存文件不在内）。
+- **后端**：
+  - `GET /api/backup/library`（admin）：返回 `{schemaVersion:2, app:'hdbc-dance', kind:'library', exportedAt, total, counts, collections}`，带 `Content-Disposition` 直接下载 `dance-library-<日期>.json`。
+  - `POST /api/restore/library`（admin）：body `{ collections, mode }`；`mode=merge` 只新增缺失 mid（`mergeCollections`），`mode=replace` 整体替换（`replaceAll`，按 mid 去重并归一化 schema v2）；缺 `collections` 返回 400。
+  - `LibraryStore` 新增 `exportDoc()` / `replaceAll()` / `mergeCollections()`。
+- **前端**：设置页新增「曲库备份 / 恢复」：`导出备份（JSON）`（fetch → blob → 下载，带 `x-admin-token`）；`恢复备份…`（选文件 → 二次确认「合并/替换」→ 上传）。
+- **实测**：无 admin → 403；导出 `total=1013` / 9 类；合并一条 → `added=1`；删除后 `replace` 往返 `replaced=1013` 与原库一致；`/api/library/types` 计数不变；`smoke-v6` 27/27、`smoke-v7` 14/14；设置页渲染「曲库备份 / 恢复」（两按钮 + 文件选择），无 console 报错。

@@ -8,7 +8,7 @@ import type { Quality, Song } from '@hdbc/qqmusic-sdk';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { ROOT, type BackendConfig } from './config';
 import { SessionStore } from './session';
-import { LibraryStore } from './library';
+import { LibraryStore, type LibrarySong } from './library';
 import { ClientPool } from './clients';
 import { TaskStore } from './tasks';
 import { SetlistStore, generateSetlist, checkSetlist, type EventMeta } from './setlist';
@@ -554,6 +554,42 @@ export function createServer(cfg: BackendConfig) {
     }
     if (p === '/api/library/stats' && method === 'GET') {
       return sendJson(res, 200, { ok: true, data: library.stats() });
+    }
+    // 曲库备份：导出全库 JSON（带清单信息），直接下载
+    if (p === '/api/backup/library' && method === 'GET') {
+      if (!isAdmin) return sendJson(res, 403, { ok: false, error: 'forbidden' });
+      const doc = library.exportDoc();
+      const counts: Record<string, number> = {};
+      let total = 0;
+      for (const [type, songs] of Object.entries(doc.collections)) {
+        counts[type] = songs.length;
+        total += songs.length;
+      }
+      const payload = { schemaVersion: 2, app: 'hdbc-dance', kind: 'library', exportedAt: Date.now(), total, counts, collections: doc.collections };
+      const buf = Buffer.from(JSON.stringify(payload), 'utf8');
+      const stamp = new Date().toISOString().slice(0, 10);
+      res.writeHead(200, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Content-Disposition': `attachment; filename="dance-library-${stamp}.json"`,
+        'Content-Length': String(buf.length),
+      });
+      res.end(buf);
+      return;
+    }
+    // 曲库恢复：替换（默认）或合并
+    if (p === '/api/restore/library' && method === 'POST') {
+      if (!isAdmin) return sendJson(res, 403, { ok: false, error: 'forbidden' });
+      const body = await readBody(req);
+      const collections = (body.collections ?? body) as Record<string, LibrarySong[]>;
+      if (!collections || typeof collections !== 'object' || Array.isArray(collections)) {
+        return sendJson(res, 400, { ok: false, error: 'bad backup', message: '缺少 collections 字段' });
+      }
+      if (body.mode === 'merge') {
+        const r = await library.mergeCollections(collections);
+        return sendJson(res, 200, { ok: true, mode: 'merge', ...r });
+      }
+      const replaced = await library.replaceAll(collections);
+      return sendJson(res, 200, { ok: true, mode: 'replace', replaced });
     }
     if (p === '/api/library/list' && method === 'GET') {
       if (url.searchParams.get('liked')) return sendJson(res, 200, { ok: true, type: '__liked__', songs: library.likedSongs() });

@@ -814,3 +814,10 @@ D:\music-download\
   - `LibraryStore` 新增 `exportDoc()` / `replaceAll()` / `mergeCollections()`。
 - **前端**：设置页新增「曲库备份 / 恢复」：`导出备份（JSON）`（fetch → blob → 下载，带 `x-admin-token`）；`恢复备份…`（选文件 → 二次确认「合并/替换」→ 上传）。
 - **实测**：无 admin → 403；导出 `total=1013` / 9 类；合并一条 → `added=1`；删除后 `replace` 往返 `replaced=1013` 与原库一致；`/api/library/types` 计数不变；`smoke-v6` 27/27、`smoke-v7` 14/14；设置页渲染「曲库备份 / 恢复」（两按钮 + 文件选择），无 console 报错。
+
+## 43. 大屏增强：舞种色带 + 封面进度环 + 已点歌滚动条（✅ 已完成并实测）
+
+- **舞种色带**：`TYPE_COLORS` 给每个舞种一个强调色；当前曲目的**舞种标签背景**、封面**进度环**颜色、屏幕**底部色带**、以及「接下来」列表里每个舞种的 `<em>` 都随舞种着色（切歌平滑过渡）。
+- **封面进度环**：封面右上叠加 SVG 环（track + fill），`stroke-dashoffset` 绑定播放进度 `pct`，颜色取当前舞种色。
+- **已点歌滚动条**：顶部新增 `.wall-ticker`，轮询 `/api/requests`（每 10s）取「待处理 / 已采纳」，内容用 CSS marquee（`@keyframes ticker`，文本复制两份、`translateX(0 → -50%)`）循环滚动；无点歌时显示「暂无点歌 · 扫码点歌 →」。
+- **实测**：造队列打开 `/wall` —— `.wall-type` / `.wall-band` 背景 = `rgb(197,160,89)`（平四）、「接下来」里 伦巴 `rgb(197,107,138)` / 慢三 `rgb(127,157,192)`；进度环 `stroke=rgb(197,160,89)`、`stroke-dashoffset` 随进度；造一条点歌后滚动条显示该曲且带 `scroll` 类（`animation: ticker`）；无 console 报错；`smoke-v6` 27/27、`smoke-v7` 14/14。

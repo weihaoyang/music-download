@@ -34,6 +34,31 @@ function trackGain(loudness?: number | null): number {
   return Math.pow(10, db / 20);
 }
 
+/** 舞种色带：给每个舞种一个专属强调色（用于标签 / 底部色带 / 列表强调） */
+const TYPE_COLORS: Record<string, string> = {
+  慢三: '#7f9dc0',
+  中三: '#8aa6c4',
+  快三: '#5f86b0',
+  慢四: '#6b8cae',
+  中四: '#8aa6c4',
+  平四: '#c5a059',
+  并四: '#b07d3a',
+  伦巴: '#c56b8a',
+  吉特巴: '#d1603d',
+  集体舞: '#5e8c6a',
+  华尔兹: '#7f9dc0',
+  探戈: '#a8503f',
+  恰恰: '#c56b8a',
+  桑巴: '#d98c4a',
+  牛仔: '#d1603d',
+};
+function typeColor(t?: string | null): string {
+  return (t && TYPE_COLORS[t]) || '#c5a059';
+}
+/** 封面进度环几何 */
+const RING_R = 45;
+const RING_C = 2 * Math.PI * RING_R;
+
 /** 舞会大屏播放（/wall）：howler + anime；切歌自动淡出→切换→淡入 */
 export default function WallApp() {
   const q = getQueue();
@@ -56,6 +81,7 @@ export default function WallApp() {
   const busyRef = useRef(false);
   const [finished, setFinished] = useState(false);
   const [qr, setQr] = useState('');
+  const [reqs, setReqs] = useState<Array<{ id: string; name: string; status: string }>>([]);
 
   const cur = items[idx];
   const limitSec = cur && cur.playMs && cur.playMs > 0 ? cur.playMs / 1000 : 0;
@@ -71,6 +97,26 @@ export default function WallApp() {
   // 点歌二维码（离线生成）
   useEffect(() => {
     QRCode.toDataURL(window.location.origin + '/request', { width: 240, margin: 1 }).then(setQr).catch(() => {});
+  }, []);
+
+  // 已点歌滚动提示：轮询点歌队列（待处理 / 已采纳）
+  useEffect(() => {
+    let alive = true;
+    const load = () => {
+      fetch('/api/requests')
+        .then((r) => r.json())
+        .then((j) => {
+          if (!alive) return;
+          setReqs((j?.data || []).filter((x: { status: string }) => x.status === 'pending' || x.status === 'accepted'));
+        })
+        .catch(() => {});
+    };
+    load();
+    const t = window.setInterval(load, 10000);
+    return () => {
+      alive = false;
+      window.clearInterval(t);
+    };
   }, []);
 
   // 播放当前曲目（淡入）+ 视觉过渡
@@ -213,6 +259,8 @@ export default function WallApp() {
   const curLine = [...lrc].reverse().find((l) => l.t <= pos + 0.15);
   const nextLine = lrc.find((l) => l.t > pos + 0.15);
   const upcoming = items.slice(idx + 1, idx + 7);
+  const accent = typeColor(cur?.type);
+  const reqText = reqs.length ? reqs.map((r) => r.name).join('　·　') : '';
 
   if (!items.length) {
     return (
@@ -261,14 +309,31 @@ export default function WallApp() {
         </div>
       </header>
 
+      <div className="wall-ticker">
+        <span className="ticker-label">点歌</span>
+        <div className="ticker-track">
+          <span className={'ticker-inner' + (reqs.length ? ' scroll' : '')}>{reqs.length ? reqText + '　　·　　' + reqText : '暂无点歌 · 扫码点歌 →'}</span>
+        </div>
+      </div>
+
       <main className="wall-main" ref={stageRef}>
         <div className="wall-cover">
           {[0, 1].map((i) => (layers.cover[i] ? <img key={'c' + i} className={layers.front === i ? 'front' : ''} src={layers.cover[i] as string} alt="" /> : null))}
           {!layers.cover[layers.front] ? <div className="wall-cover-ph front" /> : null}
+          <svg className="wall-ring" viewBox="0 0 100 100" aria-hidden>
+            <circle className="ring-track" cx="50" cy="50" r={RING_R} />
+            <circle
+              className="ring-fill"
+              cx="50"
+              cy="50"
+              r={RING_R}
+              style={{ stroke: accent, strokeDasharray: RING_C, strokeDashoffset: RING_C * (1 - pct / 100) }}
+            />
+          </svg>
         </div>
 
         <section className="wall-info">
-          {cur?.type ? <span className="wall-type">{cur.type}</span> : null}
+          {cur?.type ? <span className="wall-type" style={{ background: accent }}>{cur.type}</span> : null}
           <h1 className="wall-title">{cur?.name}</h1>
           <div className="wall-artist">{(cur?.artists || []).join(' / ')}</div>
 
@@ -296,7 +361,7 @@ export default function WallApp() {
                 <span className="n-main">
                   <span className="n-name">{s.name}</span>
                   <span className="n-sub">
-                    {s.type ? <em>{s.type}</em> : null}
+                    {s.type ? <em style={{ color: typeColor(s.type) }}>{s.type}</em> : null}
                     {(s.artists || []).join(' / ')}
                   </span>
                 </span>
@@ -327,6 +392,7 @@ export default function WallApp() {
       </div>
 
       <div className="wall-hint">空格 播放/暂停 · ← → 切歌（自动淡入淡出）· F 全屏 · Esc/返回 退出</div>
+      <div className="wall-band" style={{ background: accent }} />
     </div>
   );
 }

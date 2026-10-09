@@ -1308,3 +1308,85 @@ body {
   min-width: 64px;
   text-align: right;
 }
+
+/* 大屏增强：舞种色带 / 封面进度环 / 已点歌滚动条 */
+.wall-band {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 0.7vh;
+  z-index: 5;
+  transition: background 0.8s ease;
+  box-shadow: 0 -1px 14px rgba(26, 58, 95, 0.12);
+}
+.wall-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.wall-ring .ring-track {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.38);
+  stroke-width: 2.6;
+}
+.wall-ring .ring-fill {
+  fill: none;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+  transition: stroke-dashoffset 0.35s linear, stroke 0.6s ease;
+  filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.4));
+}
+.wall-ticker {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 1vw;
+  margin: 1.4vh 0 0.4vh;
+  padding: 0.5vh 0;
+  border-top: 1px solid rgba(197, 160, 89, 0.25);
+  border-bottom: 1px solid rgba(197, 160, 89, 0.25);
+  overflow: hidden;
+  white-space: nowrap;
+}
+.ticker-label {
+  flex: none;
+  font-size: 0.85vw;
+  letter-spacing: 0.25em;
+  color: #fff;
+  background: var(--gold);
+  padding: 0.3em 0.9em;
+  border-radius: 999px;
+}
+.ticker-track {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  height: 1.7vw;
+}
+.ticker-inner {
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: nowrap;
+  font-size: 1vw;
+  line-height: 1.7vw;
+  color: rgba(26, 58, 95, 0.72);
+}
+.ticker-inner.scroll {
+  animation: ticker 26s linear infinite;
+  will-change: transform;
+}
+@keyframes ticker {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}

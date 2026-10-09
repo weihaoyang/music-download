@@ -350,7 +350,10 @@ export default function App() {
           setTask(r.data);
           if (r.data.status === 'done') {
             const label = kindLabel(r.data.kind);
-            Toast.success(`${label}完成：成功 ${r.data.done}，失败 ${r.data.failed}`);
+            const errs = (r.data as { errors?: Record<string, string> }).errors;
+            const firstErr = errs ? Object.values(errs)[0] : '';
+            if (r.data.failed > 0) Toast.warning(`${label}完成：成功 ${r.data.done}，失败 ${r.data.failed}${firstErr ? '（' + firstErr + '）' : ''}`);
+            else Toast.success(`${label}完成：成功 ${r.data.done}，失败 ${r.data.failed}`);
             if (activeType) loadSongs(activeType);
             loadTypes();
           }
@@ -1279,8 +1282,8 @@ export default function App() {
                   <div className="status-card">
                     <div className="sc-title">最近任务</div>
                     <div className="sc-body">
-                      {(status.tasks as Array<{ kind: TaskItem['kind']; done: number; total: number; failed: number }>)
-                        .map((t) => `${kindLabel(t.kind)} ${t.done}/${t.total}${t.failed ? '（失败 ' + t.failed + '）' : ''}`)
+                      {(status.tasks as Array<{ kind: TaskItem['kind']; done: number; total: number; failed: number; error?: string }>)
+                        .map((t) => `${kindLabel(t.kind)} ${t.done}/${t.total}${t.failed ? `（失败 ${t.failed}${t.error ? '：' + t.error : ''}）` : ''}`)
                         .join('　') || '无'}
                     </div>
                   </div>

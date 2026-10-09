@@ -175,11 +175,11 @@ export class MediaCache {
     });
   }
 
-  /** 后台队列下载（受限并发）；fetcher 返回本地文件名 */
+  /** 后台队列下载（受限并发）；fetcher 返回本地文件名；失败时回传原因 */
   enqueue(
     mid: string,
     fetcher: () => Promise<string>,
-    opts: { onStart?: (mid: string) => void; onDone?: (mid: string, file: string | null, sizeBytes: number) => void } = {},
+    opts: { onStart?: (mid: string) => void; onDone?: (mid: string, file: string | null, sizeBytes: number, error?: string) => void } = {},
   ): void {
     this.queue.push(async () => {
       opts.onStart?.(mid);
@@ -189,8 +189,9 @@ export class MediaCache {
         this.logger.info(`[media] 已缓存 ${mid} -> ${file}`);
         opts.onDone?.(mid, file, size);
       } catch (e) {
-        this.logger.warn(`[media] 下载失败 ${mid}: ${(e as Error)?.message}`);
-        opts.onDone?.(mid, null, 0);
+        const msg = (e as Error)?.message || String(e);
+        this.logger.warn(`[media] 下载失败 ${mid}: ${msg}`);
+        opts.onDone?.(mid, null, 0, msg);
       }
     });
     this.drain();

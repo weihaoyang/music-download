@@ -40,10 +40,10 @@ export declare class MediaCache {
     private normalizeToMp3;
     private probeCodec;
     private transcode;
-    /** 后台队列下载（受限并发）；fetcher 返回本地文件名 */
+    /** 后台队列下载（受限并发）；fetcher 返回本地文件名；失败时回传原因 */
     enqueue(mid: string, fetcher: () => Promise<string>, opts?: {
         onStart?: (mid: string) => void;
-        onDone?: (mid: string, file: string | null, sizeBytes: number) => void;
+        onDone?: (mid: string, file: string | null, sizeBytes: number, error?: string) => void;
     }): void;
     private drain;
 }

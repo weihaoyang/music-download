@@ -171,7 +171,7 @@ class MediaCache {
             p.on('close', (code) => resolve(code === 0));
         });
     }
-    /** 后台队列下载（受限并发）；fetcher 返回本地文件名 */
+    /** 后台队列下载（受限并发）；fetcher 返回本地文件名；失败时回传原因 */
     enqueue(mid, fetcher, opts = {}) {
         this.queue.push(async () => {
             opts.onStart?.(mid);
@@ -182,8 +182,9 @@ class MediaCache {
                 opts.onDone?.(mid, file, size);
             }
             catch (e) {
-                this.logger.warn(`[media] 下载失败 ${mid}: ${e?.message}`);
-                opts.onDone?.(mid, null, 0);
+                const msg = e?.message || String(e);
+                this.logger.warn(`[media] 下载失败 ${mid}: ${msg}`);
+                opts.onDone?.(mid, null, 0, msg);
             }
         });
         this.drain();

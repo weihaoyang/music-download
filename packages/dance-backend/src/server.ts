@@ -185,8 +185,8 @@ export function createServer(cfg: BackendConfig) {
     for (const mid of mids) {
       media.enqueue(mid, () => assetFetcher(mid), {
         onStart: (m) => tasks.start(task.id, m),
-        onDone: (m, file, size) => {
-          tasks.settle(task.id, m, !!file);
+        onDone: (m, file, size, error) => {
+          tasks.settle(task.id, m, !!file, error);
           onDownloaded(m, file, size);
         },
       });
@@ -383,7 +383,7 @@ export function createServer(cfg: BackendConfig) {
         sources: [...sources.values()].map((d) => ({ id: d.id, label: d.label, kind: d.kind, auth: d.authed(), search: !!d.search })),
         sessions: sessions.list().length,
         setlists: setlists.list().length,
-        tasks: tasks.list().slice(0, 5).map((t) => ({ id: t.id, kind: t.kind, status: t.status, total: t.total, done: t.done, failed: t.failed })),
+        tasks: tasks.list().slice(0, 5).map((t) => ({ id: t.id, kind: t.kind, status: t.status, total: t.total, done: t.done, failed: t.failed, error: t.errors ? Object.values(t.errors)[0] : undefined })),
         deps: { ffmpeg: ffmpegAvailable() },
       });
     }

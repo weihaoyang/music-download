@@ -12,6 +12,7 @@ export interface DownloadTask {
   failed: number;
   items: Record<string, DownloadItemState>;
   results?: Record<string, unknown>;
+  errors?: Record<string, string>;
   createdAt: number;
   updatedAt: number;
 }
@@ -65,13 +66,19 @@ export class TaskStore {
     t.updatedAt = Date.now();
   }
 
-  settle(id: string, mid: string, ok: boolean): void {
+  settle(id: string, mid: string, ok: boolean, error?: string): void {
     const t = this.tasks.get(id);
     if (!t) return;
     if (t.items[mid] === 'done' || t.items[mid] === 'failed') return;
     t.items[mid] = ok ? 'done' : 'failed';
     if (ok) t.done += 1;
-    else t.failed += 1;
+    else {
+      t.failed += 1;
+      if (error) {
+        if (!t.errors) t.errors = {};
+        t.errors[mid] = error;
+      }
+    }
     t.updatedAt = Date.now();
     if (t.done + t.failed >= t.total) t.status = 'done';
   }

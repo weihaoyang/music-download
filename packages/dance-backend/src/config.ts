@@ -14,6 +14,8 @@ export interface BackendConfig {
   webDir: string;
   bridgeUrl: string;
   adminToken: string;
+  /** 可选：编辑员口令（可编辑曲库/导入/排曲，但不能改设置或做破坏性操作） */
+  editorToken: string;
   /** 本地缓存音质 */
   mediaQuality: Quality;
   /** 导入/播放时自动下载到本地 */
@@ -48,6 +50,7 @@ export function loadConfig(): BackendConfig {
     webDir: abs(String(file.webDir ?? '../dance-frontend/dist')),
     bridgeUrl: String(file.bridgeUrl ?? 'http://127.0.0.1:8899/cookie'),
     adminToken: String(file.adminToken ?? ''),
+    editorToken: String(file.editorToken ?? ''),
     mediaQuality: (String(file.mediaQuality ?? '320') as Quality),
     autoDownload: file.autoDownload !== false,
     downloadConcurrency: Number(file.downloadConcurrency ?? 3),

@@ -345,7 +345,9 @@ export function createServer(cfg: BackendConfig) {
     const method = req.method || 'GET';
     const cookies = parseCookies(req);
     const session = sessions.get(cookies['sid']);
-    const isAdmin = !cfg.adminToken || req.headers['x-admin-token'] === cfg.adminToken;
+    const isAdmin = (!cfg.adminToken || req.headers['x-admin-token'] === cfg.adminToken);
+    const isEditor = !!cfg.editorToken && req.headers['x-admin-token'] === cfg.editorToken;
+    const canEdit = isAdmin || isEditor;
 
     /* --------------------------- 静态：音频 / 前端 --------------------------- */
     if (p.startsWith('/media/')) {
@@ -425,7 +427,7 @@ export function createServer(cfg: BackendConfig) {
     {
       const m = p.match(/^\/api\/requests\/([^/]+)$/);
       if (m && method === 'POST') {
-        if (!isAdmin) return sendJson(res, 403, { ok: false, error: 'forbidden' });
+        if (!canEdit) return sendJson(res, 403, { ok: false, error: 'forbidden' });
         const body = await readBody(req);
         const status = String(body.status || '');
         if (!['pending', 'accepted', 'rejected', 'played'].includes(status)) return sendJson(res, 400, { ok: false, error: 'bad status' });
@@ -434,7 +436,7 @@ export function createServer(cfg: BackendConfig) {
         return sendJson(res, 200, { ok: true, data: row, stats: requests.stats() });
       }
       if (m && method === 'DELETE') {
-        if (!isAdmin) return sendJson(res, 403, { ok: false, error: 'forbidden' });
+        if (!canEdit) return sendJson(res, 403, { ok: false, error: 'forbidden' });
         const ok = await requests.remove(m[1]);
         if (!ok) return sendJson(res, 404, { ok: false, error: 'not found' });
         return sendJson(res, 200, { ok: true, stats: requests.stats() });
@@ -443,7 +445,7 @@ export function createServer(cfg: BackendConfig) {
 
     /* ------------------------------ 运行时设置 ------------------------------ */
     if (p === '/api/media/usage' && method === 'GET') {
-      if (!isAdmin) return sendJson(res, 403, { ok: false, error: 'forbidden' });
+      if (!canEdit) return sendJson(res, 403, { ok: false, error: 'forbidden' });
       const s = await media.stats();
       return sendJson(res, 200, { ok: true, data: { ...s, limit: eff().cacheLimitBytes, mediaDir: eff().mediaDir } });
     }
@@ -488,7 +490,7 @@ export function createServer(cfg: BackendConfig) {
       return sendJson(res, 200, { ok: true, type, songs: library.list(type) });
     }
     if (p === '/api/library/import' && method === 'POST') {
-      if (!isAdmin) return sendJson(res, 403, { ok: false, error: 'forbidden' });
+      if (!canEdit) return sendJson(res, 403, { ok: false, error: 'forbidden' });
       const body = await readBody(req);
       const type = String(body.type || '');
       if (!type) return sendJson(res, 400, { ok: false, error: 'type required' });
@@ -504,7 +506,7 @@ export function createServer(cfg: BackendConfig) {
     }
     // 导入「我喜欢」（dirid=201，走客户端镜像的会员账号）；默认只导元数据，不批量下载（播放时再缓存）
     if (p === '/api/library/import-liked' && method === 'POST') {
-      if (!isAdmin) return sendJson(res, 403, { ok: false, error: 'forbidden' });
+      if (!canEdit) return sendJson(res, 403, { ok: false, error: 'forbidden' });
       const body = await readBody(req);
       const type = String(body.type || '未分类');
       const download = !!body.download;
@@ -529,7 +531,7 @@ export function createServer(cfg: BackendConfig) {
     }
     // 按 HBDC 文件命名规则「舞种-歌曲名-歌手」精确校准曲库
     if (p === '/api/library/calibrate' && method === 'POST') {
-      if (!isAdmin) return sendJson(res, 403, { ok: false, error: 'forbidden' });
+      if (!canEdit) return sendJson(res, 403, { ok: false, error: 'forbidden' });
       const body = await readBody(req);
       const addMissing = !!body.addMissing;
       const dryRun = !!body.dryRun;
@@ -610,7 +612,7 @@ export function createServer(cfg: BackendConfig) {
       return sendJson(res, 200, { ok: true, data: { ...report, unparsed: unparsed.slice(0, 50) } });
     }
     if (p === '/api/library/download' && method === 'POST') {
-      if (!isAdmin) return sendJson(res, 403, { ok: false, error: 'forbidden' });
+      if (!canEdit) return sendJson(res, 403, { ok: false, error: 'forbidden' });
       const body = await readBody(req);
       const type = String(body.type || '');
       const source = body.source ? String(body.source) : '';
@@ -622,7 +624,7 @@ export function createServer(cfg: BackendConfig) {
     }
     // 单曲下载到本地（缓存）
     if (p === '/api/library/download-song' && method === 'POST') {
-      if (!isAdmin) return sendJson(res, 403, { ok: false, error: 'forbidden' });
+      if (!canEdit) return sendJson(res, 403, { ok: false, error: 'forbidden' });
       const body = await readBody(req);
       const mid = String(body.mid || '');
       if (!mid) return sendJson(res, 400, { ok: false, error: 'mid required' });
@@ -631,7 +633,7 @@ export function createServer(cfg: BackendConfig) {
     }
     // 真实剪辑：用 ffmpeg 剪出区间，替换为该曲目的播放版本（标「已编辑」）
     if (p === '/api/library/clip' && method === 'POST') {
-      if (!isAdmin) return sendJson(res, 403, { ok: false, error: 'forbidden' });
+      if (!canEdit) return sendJson(res, 403, { ok: false, error: 'forbidden' });
       const body = await readBody(req);
       const mid = String(body.mid || '');
       const hit = library.findByMid(mid);
@@ -682,7 +684,7 @@ export function createServer(cfg: BackendConfig) {
       return sendJson(res, 200, { ok: true, count: dups.length, groups: dups });
     }
     if (p === '/api/library/song' && method === 'PUT') {
-      if (!isAdmin) return sendJson(res, 403, { ok: false, error: 'forbidden' });
+      if (!canEdit) return sendJson(res, 403, { ok: false, error: 'forbidden' });
       const body = await readBody(req);
       const mid = String(body.mid || '');
       if (!mid) return sendJson(res, 400, { ok: false, error: 'mid required' });
@@ -700,7 +702,7 @@ export function createServer(cfg: BackendConfig) {
       return sendJson(res, 200, { ok: true, data: song });
     }
     if (p === '/api/library/song' && method === 'DELETE') {
-      if (!isAdmin) return sendJson(res, 403, { ok: false, error: 'forbidden' });
+      if (!canEdit) return sendJson(res, 403, { ok: false, error: 'forbidden' });
       const mid = url.searchParams.get('mid') || String((await readBody(req)).mid || '');
       if (!mid) return sendJson(res, 400, { ok: false, error: 'mid required' });
       const ok = await library.removeSong(mid);
@@ -709,7 +711,7 @@ export function createServer(cfg: BackendConfig) {
     }
     // 重新扫描缓存目录：文件存在的补上 file 标记/大小，缺失的清掉（换目录/手工删文件后校正）
     if (p === '/api/library/scan' && method === 'POST') {
-      if (!isAdmin) return sendJson(res, 403, { ok: false, error: 'forbidden' });
+      if (!canEdit) return sendJson(res, 403, { ok: false, error: 'forbidden' });
       let linked = 0;
       let cleared = 0;
       for (const s of library.allSongs()) {
@@ -729,7 +731,7 @@ export function createServer(cfg: BackendConfig) {
     }
     // 自动舞种分类（基于 aubio BPM + 节拍）：对已缓存音频逐个分析并回写舞种
     if (p === '/api/library/classify' && method === 'POST') {
-      if (!isAdmin) return sendJson(res, 403, { ok: false, error: 'forbidden' });
+      if (!canEdit) return sendJson(res, 403, { ok: false, error: 'forbidden' });
       const body = await readBody(req);
       const type = String(body.type || '');
       // 只跳过人工类型（集体舞）；「未分类」等都可自动识别（只处理已缓存音频）
@@ -741,7 +743,7 @@ export function createServer(cfg: BackendConfig) {
     }
     // 批量「缓存 + 分类」：未缓存的先下载（HQ），再分析舞种；受 20GB 缓存上限约束
     if (p === '/api/library/cache-classify' && method === 'POST') {
-      if (!isAdmin) return sendJson(res, 403, { ok: false, error: 'forbidden' });
+      if (!canEdit) return sendJson(res, 403, { ok: false, error: 'forbidden' });
       const body = await readBody(req);
       const type = String(body.type || '未分类');
       const limit = Number(body.limit ?? 0);
@@ -826,7 +828,7 @@ export function createServer(cfg: BackendConfig) {
     {
       const m = p.match(/^\/api\/source\/([^/]+)\/import$/);
       if (m && method === 'POST') {
-        if (!isAdmin) return sendJson(res, 403, { ok: false, error: 'forbidden' });
+        if (!canEdit) return sendJson(res, 403, { ok: false, error: 'forbidden' });
         const def = sources.get(m[1]);
         if (!def) return sendJson(res, 404, { ok: false, error: 'unknown source' });
         const body = await readBody(req);

@@ -1581,7 +1581,7 @@ export default function App() {
         <div className="settings-form">
           <div className="field">
             <span>管理员口令</span>
-            <Input value={adminTokenState} onChange={setAdminTokenState} placeholder="config.json 里的 adminToken" />
+            <Input value={adminTokenState} onChange={setAdminTokenState} placeholder="config.json 里的 adminToken（编辑员可填 editorToken）" />
           </div>
           <div className="field">
             <span>音频缓存目录</span>

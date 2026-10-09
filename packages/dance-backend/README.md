@@ -34,7 +34,8 @@
 ```
 
 - `bridgeUrl`：客户端镜像地址（没有也能跑，但只有匿名能力：搜索/详情；播放/导入会失败）。
-- `adminToken`：`/api/library/import` 的管理口令（`x-admin-token` 头）。
+- `adminToken`：管理接口口令（`x-admin-token` 头）。
+- `editorToken`（可选）：**编辑员**口令——可编辑曲库/导入/分类/排曲/点歌管理，但**不能**改设置（缓存目录/音质/Cookie）、不能「清空来源」等破坏性操作。
 
 ## 运行
 

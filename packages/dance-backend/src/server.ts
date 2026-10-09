@@ -652,6 +652,32 @@ export function createServer(cfg: BackendConfig) {
       const page = await client.search.playlists({ keyword: url.searchParams.get('keywords') || '', limit: Number(url.searchParams.get('limit') || 20) });
       return sendJson(res, 200, { ok: true, ...page });
     }
+    // 聚合搜索：并行查所有支持搜索的来源，交错合并（每条带 source）
+    if (p === '/api/search/aggregate' && method === 'GET') {
+      const kw = url.searchParams.get('keywords') || '';
+      const limit = Number(url.searchParams.get('limit') || 20);
+      const searchers = [...sources.values()].filter((d) => d.search);
+      const settled = await Promise.allSettled(
+        searchers.map(async (d) => {
+          const items = (await d.search!(kw, 'song', limit)) as Array<Record<string, unknown>>;
+          return items.map((x) => ({
+            source: d.id,
+            sourceLabel: d.label,
+            mid: String(x.mid ?? x.id ?? ''),
+            name: String(x.name ?? ''),
+            artists: (x.artists as string[]) || [],
+            album: typeof x.album === 'string' ? x.album : ((x.album as { name?: string } | null)?.name ?? null),
+            durationMs: Number(x.durationMs ?? 0),
+            coverUrl: (x.coverUrl as string) || null,
+          }));
+        }),
+      );
+      const lists = settled.map((r) => (r.status === 'fulfilled' ? r.value : []));
+      const merged: Array<Record<string, unknown>> = [];
+      const maxLen = lists.reduce((m, l) => Math.max(m, l.length), 0);
+      for (let i = 0; i < maxLen; i++) for (const l of lists) if (l[i]) merged.push(l[i]);
+      return sendJson(res, 200, { ok: true, items: merged });
+    }
     // 可用下载来源（来源注册表）
     if (p === '/api/sources' && method === 'GET') {
       return sendJson(res, 200, {

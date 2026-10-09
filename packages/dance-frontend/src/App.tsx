@@ -117,7 +117,7 @@ export default function App() {
   const [importing, setImporting] = useState(false);
 
   // 多来源
-  const [searchSource, setSearchSource] = useState<'qqmusic' | 'netease'>('qqmusic');
+  const [searchSource, setSearchSource] = useState<'all' | 'qqmusic' | 'netease'>('all');
   const [addType, setAddType] = useState('未分类');
   const [sourceFilter, setSourceFilter] = useState('all');
   const [importSource, setImportSource] = useState<'qqmusic' | 'netease' | 'local' | 'http'>('qqmusic');
@@ -445,35 +445,47 @@ export default function App() {
     if (!kw.trim()) return;
     setLoadingSearch(true);
     const path =
-      searchSource === 'netease'
-        ? '/api/source/netease/search?type=song&keywords=' + encodeURIComponent(kw) + '&limit=30'
-        : '/api/search?keywords=' + encodeURIComponent(kw);
+      searchSource === 'all'
+        ? '/api/search/aggregate?keywords=' + encodeURIComponent(kw) + '&limit=15'
+        : searchSource === 'netease'
+          ? '/api/source/netease/search?type=song&keywords=' + encodeURIComponent(kw) + '&limit=30'
+          : '/api/search?keywords=' + encodeURIComponent(kw);
     api<{ items: Array<Record<string, unknown>> }>(path)
       .then((r) => {
+        const label = searchSource === 'netease' ? '网易云音乐' : 'QQ音乐';
         const items = (r.items || []).map((x) =>
-          searchSource === 'netease'
-            ? {
-                mid: String(x.id),
+          searchSource === 'all'
+            ? x
+            : {
+                mid: String(x.mid ?? x.id),
                 name: String(x.name ?? ''),
                 artists: (x.artists as string[]) || [],
-                album: x.album ? { name: String(x.album) } : null,
-                durationMs: Number(x.durationMs) || 0,
+                album: typeof x.album === 'string' ? x.album : ((x.album as { name?: string } | null)?.name ?? null),
+                durationMs: Number(x.durationMs ?? 0),
                 coverUrl: (x.coverUrl as string) || null,
-              }
-            : x,
+                source: searchSource,
+                sourceLabel: label,
+              },
         );
         setResults(items as unknown as Song[]);
       })
       .catch((e) => Toast.error(e.message))
       .finally(() => setLoadingSearch(false));
   }
+  function searchItemSource(s: Song): 'qqmusic' | 'netease' {
+    const src = (s as unknown as { source?: string }).source;
+    if (src === 'netease') return 'netease';
+    if (src === 'qqmusic') return 'qqmusic';
+    return searchSource === 'netease' ? 'netease' : 'qqmusic';
+  }
+  function importSearchItem(s: Song) {
+    return searchItemSource(s) === 'netease'
+      ? adminFetch<{ added: number }>('/api/source/netease/import', 'POST', { type: addType, input: 'https://music.163.com/song?id=' + s.mid })
+      : adminFetch<{ added: number }>('/api/source/qqmusic/import', 'POST', { type: addType, songMid: s.mid });
+  }
   function addSearchResult(s: Song) {
     setAdminToken(adminTokenState);
-    const req =
-      searchSource === 'netease'
-        ? adminFetch<{ added: number }>('/api/source/netease/import', 'POST', { type: addType, input: 'https://music.163.com/song?id=' + s.mid })
-        : adminFetch<{ added: number }>('/api/source/qqmusic/import', 'POST', { type: addType, songMid: s.mid });
-    req
+    importSearchItem(s)
       .then((r) => {
         Toast.success(r.added ? `已加入「${addType}」` : `「${addType}」中已存在`);
         loadTypes();
@@ -482,11 +494,7 @@ export default function App() {
   }
   function downloadSearchResult(s: Song) {
     setAdminToken(adminTokenState);
-    const req =
-      searchSource === 'netease'
-        ? adminFetch<{ added: number }>('/api/source/netease/import', 'POST', { type: addType, input: 'https://music.163.com/song?id=' + s.mid })
-        : adminFetch<{ added: number }>('/api/source/qqmusic/import', 'POST', { type: addType, songMid: s.mid });
-    req
+    importSearchItem(s)
       .then(() => adminFetch<{ taskId: string; queued: number }>('/api/library/download-song', 'POST', { mid: s.mid }))
       .then((r) => {
         Toast.info(`开始下载「${s.name}」到本地…`);
@@ -720,6 +728,9 @@ export default function App() {
         </div>
         <div className="song-meta">
           {isLib ? <span className="chip chip-gold">{lib.type}</span> : null}
+          {!isLib && (s as { source?: string }).source ? (
+            <span className="chip chip-src">{SOURCE_LABELS[(s as { source?: string }).source as string] || (s as { sourceLabel?: string }).sourceLabel || ''}</span>
+          ) : null}
           {isLib && lib.source && lib.source !== 'qqmusic' ? (
             <span className="chip chip-src" title={'来源：' + (SOURCE_LABELS[lib.source] || lib.source)}>
               {SOURCE_LABELS[lib.source] || lib.source}
@@ -858,7 +869,8 @@ export default function App() {
               <div className="panel-head">
                 <span className="panel-title">搜索</span>
                 <div className="panel-actions">
-                  <RadioGroup type="button" value={searchSource} onChange={(e) => setSearchSource(e.target.value as 'qqmusic' | 'netease')}>
+                  <RadioGroup type="button" value={searchSource} onChange={(e) => setSearchSource(e.target.value as 'all' | 'qqmusic' | 'netease')}>
+                    <Radio value="all">聚合搜索</Radio>
                     <Radio value="qqmusic">QQ音乐</Radio>
                     <Radio value="netease">网易云音乐</Radio>
                   </RadioGroup>

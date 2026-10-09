@@ -212,4 +212,4 @@ GET /api/track/:id/stream
 
 **模型（已升级 schema v2）**：曲库存储由 `data/library.json` 迁移为 SQLite（**`data/tracks.sqlite`**，Node 内置 `node:sqlite`，原子事务写；无 `node:sqlite` 时回退 `data/tracks.json` 的 `{schemaVersion:2, collections}`）；每首 Track 含 `provenance`（`rights: external|club`、`edited`、`origin` 溯源）与 `assets[]` + `primaryAssetId`，并与原扁平字段并存以兼容。归属/是否编辑过可在编辑弹窗修改。
 
-**尚未做**：`/api/library/import` 老接口的收编（QQ 歌单已可用通用 `/api/source/qqmusic/import`）。
+**已收编**：`/api/library/import` 老接口已统一到来源注册表（内部走 `qqmusic` 来源 `build` + 共享 `importBuiltTracks()`），与通用 `/api/source/qqmusic/import` 单一实现。

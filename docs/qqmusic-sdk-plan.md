@@ -787,3 +787,9 @@ D:\music-download\
 - **后端**：`LibraryStore.stats()` + `GET /api/library/stats`（公开只读聚合，避免前端拉全库计算）：总数 / 已缓存 / 我喜欢 / 已识别 BPM / 需复核 / 不适合 / 有响度；`byType`（含 cached）、`bySource`、`bpm`（固定 8 段直方图：<80 / 80–100 / … / ≥200）、`mood`（舒缓 / 中 / 欢快）、`topPlayed`（Top 10 按 `playCount`）。
 - **前端**：新增「统计」Tab（在「点歌」与「状态」之间）：规模 / 需要关注两张卡片 + 舞种 / BPM / 曲风 / 来源四条 CSS 条形分布（**无图表库、无 CDN**）+「最常播放 Top」。条形宽度按组内最大值归一。
 - **实测**：`/api/library/stats` 返回正确（共 1013 首、缓存 50、我喜欢 1005、已识别 BPM 50、需复核 12、不适合 20）；「统计」Tab 渲染 7 张卡片、18 条分布条、「最常播放 Top」，无 console 报错；`smoke-v6` 27/27、`smoke-v7` 14/14。
+
+## 40. 收编旧接口 `/api/library/import` + 清理百度网盘死代码（✅ 已完成并实测）
+
+- **收编**：把 `/api/library/import` 从「直接调 QQ SDK `playlists.importPlaylist` + `library.importDetail`」改为**统一走 qqmusic 来源**（`sources.get('qqmusic').build(body)` 解析歌单/单曲）再交给共享的 `importBuiltTracks()`（本地文件 `addLocalSong` + 内嵌封面；其余 `addExternalSongs` 按舞种分组）。`/api/source/:id/import` 也改用同一 helper，两条路径合一；响应保持兼容（保留 `type` 字段）。
+- **清理**：删除导入来源页里**永远不可达**的「百度网盘」分支（`SOURCE_OPTIONS` 本就没有 `pan`；`importPan` / `panShare` / `panPwd` 及对应 JSX/hint 移除），消除指向不存在来源 `/api/source/pan/import` 的死引用。
+- **实测**：`/api/library/import {type,songMid}` → 200（name 正确、added 1、queued 1、有 taskId），同曲再走 `/api/source/qqmusic/import` → added 0 / skipped 1；`smoke-v6` 27/27、`smoke-v7` 14/14；导入来源页渲染四个来源、无「百度网盘」、无 console 报错。文档中「尚未做」项已完成。

@@ -173,8 +173,6 @@ export default function App() {
   const [localDir, setLocalDir] = useState('');
   const [localRec, setLocalRec] = useState(true);
   const [httpUrls, setHttpUrls] = useState('');
-  const [panShare, setPanShare] = useState('');
-  const [panPwd, setPanPwd] = useState('');
   const [loadingImport, setLoadingImport] = useState(false);
   const [cloning, setCloning] = useState(false);
 
@@ -400,17 +398,6 @@ export default function App() {
     adminFetch<{ added: number; skipped: number }>('/api/source/http/import', 'POST', { type: importType, urls })
       .then((r) => {
         Toast.success(`直链 →「${importType}」：新增 ${r.added}，跳过 ${r.skipped}`);
-        loadTypes();
-      })
-      .catch((e) => Toast.error('导入失败：' + e.message));
-  }
-  function importPan() {
-    setAdminToken(adminTokenState);
-    if (!panShare.trim()) return Toast.warning('填入百度网盘分享链接');
-    Toast.info('正在解析网盘分享…');
-    adminFetch<{ added: number; skipped: number; total: number }>('/api/source/pan/import', 'POST', { type: importType, shareUrl: panShare.trim(), pwd: panPwd || undefined })
-      .then((r) => {
-        Toast.success(`网盘导入：新增 ${r.added}，跳过 ${r.skipped}（共 ${r.total} 个音频）`);
         loadTypes();
       })
       .catch((e) => Toast.error('导入失败：' + e.message));
@@ -1195,22 +1182,11 @@ export default function App() {
                 </div>
               ) : null}
 
-              {importSource === 'pan' ? (
-                <div className="panel-actions" style={{ marginBottom: 10 }}>
-                  <Input value={panShare} onChange={setPanShare} placeholder="百度网盘分享链接 https://pan.baidu.com/s/1..." style={{ width: 360 }} />
-                  <Input value={panPwd} onChange={setPanPwd} placeholder="提取码（可选）" style={{ width: 120 }} />
-                  <Button theme="solid" type="primary" onClick={importPan}>
-                    导入到曲库
-                  </Button>
-                </div>
-              ) : null}
-
               <div className="hint" style={{ marginBottom: 10 }}>
                 {importSource === 'qqmusic' && 'QQ：歌单链接导入到默认曲库，可后台缓存；「克隆」写回你的 QQ 账号（需登录）。'}
                 {importSource === 'netease' && '网易云：歌单/单曲链接或 ID，导入后播放时再缓存（部分歌需在设置里配 neteaseCookie）。'}
                 {importSource === 'local' && '本地/社团文件夹：按《规则》文件名「舞种-歌名-歌手」扫描入库，文件保持原位。'}
                 {importSource === 'http' && '自建直链：每行一个音频 URL，播放时下载并转 mp3。'}
-                {importSource === 'pan' && '百度网盘：需在设置里配 baiduCookie(BDUSS)，解析分享后按文件名入库，播放时再解析直链。'}
               </div>
 
               {importSource === 'qqmusic' && importPreview ? (

@@ -15,7 +15,7 @@ import { SetlistStore, generateSetlist, checkSetlist, type EventMeta } from './s
 import { SettingsStore } from './settings';
 import { RequestStore } from './requests';
 import { HistoryStore } from './history';
-import { analyze, MediaCache, createSourceRegistry, scanDanceDir, coreName, localMid, extractCover, probeLoudness, clipAudio, probeDurationMs, netease, type TrackMeta } from '@hdbc/dance-sdk';
+import { analyze, MediaCache, createSourceRegistry, scanDanceDir, coreName, localMid, extractCover, probeLoudness, clipAudio, probeDurationMs, netease, type TrackMeta, type TrackSource } from '@hdbc/dance-sdk';
 import { sendJson, readBody, parseCookies, setCookie, clearCookie } from './http';
 
 const MIME: Record<string, string> = {
@@ -200,6 +200,48 @@ export function createServer(cfg: BackendConfig) {
       });
     }
     return task.id;
+  }
+
+  /** 把来源构建出的曲目写入曲库：本地文件走 addLocalSong(+内嵌封面)，其余走 addExternalSongs（按舞种分组） */
+  async function importBuiltTracks(def: TrackSource, built: { name?: string; tracks: TrackMeta[]; note?: string }, defaultType: string): Promise<{ added: number; skipped: number; newMids: string[] }> {
+    let added = 0;
+    let skipped = 0;
+    const newMids: string[] = [];
+    const byType = new Map<string, TrackMeta[]>();
+    for (const d of built.tracks) {
+      const ty = d.type || defaultType;
+      const arr = byType.get(ty) ?? [];
+      arr.push(d);
+      byType.set(ty, arr);
+    }
+    for (const [ty, list] of byType) {
+      for (const d of list) {
+        if (d.local && d.file) {
+          const isNew = await library.addLocalSong(ty, { mid: d.id, name: d.name, artists: d.artists ?? [], durationMs: d.durationMs ?? 0, file: d.file });
+          if (isNew) {
+            added++;
+            newMids.push(d.id);
+            // 提取内嵌封面到缓存目录，供前端展示
+            const coverFile = d.id + '.jpg';
+            if (await extractCover(d.file, path.join(eff().mediaDir, coverFile))) {
+              await library.updateSong(d.id, { coverUrl: '/media/' + coverFile });
+            }
+          } else skipped++;
+        }
+      }
+      const externals = list.filter((d) => !(d.local && d.file));
+      if (externals.length) {
+        const r = await library.addExternalSongs(
+          ty,
+          externals.map((d) => ({ id: d.id, name: d.name, artists: d.artists, album: d.album, durationMs: d.durationMs, coverUrl: d.coverUrl, url: d.url })),
+          def.id,
+        );
+        added += r.added;
+        skipped += r.skipped;
+        newMids.push(...r.newMids);
+      }
+    }
+    return { added, skipped, newMids };
   }
 
   /** 外部来源（注册表）解析出可播放直链；返回 null 表示该来源由其它逻辑处理 */
@@ -518,20 +560,23 @@ export function createServer(cfg: BackendConfig) {
       const type = url.searchParams.get('type') || '';
       return sendJson(res, 200, { ok: true, type, songs: library.list(type) });
     }
+    // QQ 歌单导入（旧接口，保留兼容）：收编到统一的来源导入路径（qqmusic 来源 build + importBuiltTracks）
     if (p === '/api/library/import' && method === 'POST') {
       if (!canEdit) return sendJson(res, 403, { ok: false, error: 'forbidden' });
       const body = await readBody(req);
       const type = String(body.type || '');
       if (!type) return sendJson(res, 400, { ok: false, error: 'type required' });
-      const client = await pool.libraryClient();
-      const detail = await client.playlists.importPlaylist({
-        url: body.url ? String(body.url) : undefined,
-        disstid: body.disstid ? String(body.disstid) : undefined,
-        limit: Number(body.limit ?? 1000),
-      });
-      const r = await library.importDetail(type, detail);
-      const taskId = await queueDownloads(r.newMids, type);
-      return sendJson(res, 200, { ok: true, type, name: detail.name, added: r.added, skipped: r.skipped, queued: r.newMids.length, taskId });
+      const def = sources.get('qqmusic');
+      if (!def) return sendJson(res, 500, { ok: false, error: 'qqmusic source missing' });
+      let built: { name?: string; tracks: TrackMeta[]; note?: string };
+      try {
+        built = await def.build(body);
+      } catch (e) {
+        return sendJson(res, 502, { ok: false, error: 'SOURCE_ERROR', message: (e as Error).message });
+      }
+      const r = await importBuiltTracks(def, built, type);
+      const taskId = r.newMids.length ? await queueDownloads(r.newMids, type) : undefined;
+      return sendJson(res, 200, { ok: true, type, name: built.name, added: r.added, skipped: r.skipped, queued: r.newMids.length, taskId });
     }
     // 导入「我喜欢」（dirid=201，走客户端镜像的会员账号）；默认只导元数据，不批量下载（播放时再缓存）
     if (p === '/api/library/import-liked' && method === 'POST') {
@@ -868,46 +913,10 @@ export function createServer(cfg: BackendConfig) {
         } catch (e) {
           return sendJson(res, 502, { ok: false, error: 'SOURCE_ERROR', message: (e as Error).message });
         }
-        let added = 0;
-        let skipped = 0;
-        const newMids: string[] = [];
-        const byType = new Map<string, TrackMeta[]>();
-        for (const d of built.tracks) {
-          const ty = d.type || defaultType;
-          const arr = byType.get(ty) ?? [];
-          arr.push(d);
-          byType.set(ty, arr);
-        }
-        for (const [ty, list] of byType) {
-          for (const d of list) {
-            if (d.local && d.file) {
-              const isNew = await library.addLocalSong(ty, { mid: d.id, name: d.name, artists: d.artists ?? [], durationMs: d.durationMs ?? 0, file: d.file });
-              if (isNew) {
-                added++;
-                newMids.push(d.id);
-                // 提取内嵌封面到缓存目录，供前端展示
-                const coverFile = d.id + '.jpg';
-                if (await extractCover(d.file, path.join(eff().mediaDir, coverFile))) {
-                  await library.updateSong(d.id, { coverUrl: '/media/' + coverFile });
-                }
-              } else skipped++;
-            }
-          }
-          const externals = list.filter((d) => !(d.local && d.file));
-          if (externals.length) {
-            const r = await library.addExternalSongs(
-              ty,
-              externals.map((d) => ({ id: d.id, name: d.name, artists: d.artists, album: d.album, durationMs: d.durationMs, coverUrl: d.coverUrl, url: d.url })),
-              def.id,
-            );
-            added += r.added;
-            skipped += r.skipped;
-            newMids.push(...r.newMids);
-          }
-        }
+        const r = await importBuiltTracks(def, built, defaultType);
         const download = !!body.download;
-        const taskId = download && newMids.length ? await queueDownloads(newMids, defaultType) : undefined;
-        return sendJson(res, 200, { ok: true, source: def.id, name: built.name, note: built.note, total: built.tracks.length, added, skipped, queued: download ? newMids.length : 0, taskId });
+        const taskId = download && r.newMids.length ? await queueDownloads(r.newMids, defaultType) : undefined;
+        return sendJson(res, 200, { ok: true, source: def.id, name: built.name, note: built.note, total: built.tracks.length, added: r.added, skipped: r.skipped, queued: download ? r.newMids.length : 0, taskId });
       }
     }
     /* 各来源导入已收敛到上面的 /api/source/:id/import 通用路由 */

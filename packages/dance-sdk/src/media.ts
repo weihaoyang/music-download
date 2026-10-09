@@ -6,6 +6,34 @@ import { spawn } from 'child_process';
 const ffmpegPath = process.env.MF_FFMPEG || 'ffmpeg';
 const ffprobePath = process.env.MF_FFPROBE || 'ffprobe';
 
+/** ffprobe 读音频时长（毫秒）；失败返回 0 */
+export function probeDurationMs(file: string): Promise<number> {
+  return new Promise((resolve) => {
+    const p = spawn(ffprobePath, ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', file], { windowsHide: true });
+    let out = '';
+    p.stdout.on('data', (d: Buffer) => (out += d.toString()));
+    p.on('error', () => resolve(0));
+    p.on('close', () => resolve(Math.round((parseFloat(out.trim()) || 0) * 1000)));
+  });
+}
+
+/** 提取内嵌封面到 dest；成功且非空返回 true */
+export function extractCover(src: string, dest: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const p = spawn(ffmpegPath, ['-v', 'error', '-y', '-i', src, '-an', '-vcodec', 'copy', dest], { windowsHide: true });
+    p.on('error', () => resolve(false));
+    p.on('close', async (code) => {
+      if (code !== 0) return resolve(false);
+      try {
+        const st = await fs.stat(dest);
+        resolve(st.size > 0);
+      } catch {
+        resolve(false);
+      }
+    });
+  });
+}
+
 /** 本地音频缓存：下载成文件（统一转成 mp3），彻底摆脱运行时对 QQ 的依赖 */
 export class MediaCache {
   private active = 0;
@@ -118,23 +146,12 @@ export class MediaCache {
       if (!r.ok) throw new Error(`下载失败 HTTP ${r.status}`);
       await fs.writeFile(tmp, Buffer.from(await r.arrayBuffer()));
       if (opts.expectedDurationMs && opts.expectedDurationMs > 0) {
-        const dur = await this.probeDurationMs(tmp);
+        const dur = await probeDurationMs(tmp);
         if (dur > 0 && dur < opts.expectedDurationMs * 0.7) {
           await fs.rm(tmp, { force: true }).catch(() => undefined);
           throw new Error(`返回的是试听片段（${Math.round(dur / 1000)}s < 完整 ${Math.round(opts.expectedDurationMs / 1000)}s），需登录 Cookie/会员`);
         }
       }
-    });
-  }
-
-  /** 用 ffprobe 读音频时长（毫秒），失败返回 0 */
-  private probeDurationMs(file: string): Promise<number> {
-    return new Promise((resolve) => {
-      const p = spawn(ffprobePath, ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', file], { windowsHide: true });
-      let out = '';
-      p.stdout.on('data', (d: Buffer) => (out += d.toString()));
-      p.on('error', () => resolve(0));
-      p.on('close', () => resolve(Math.round((parseFloat(out.trim()) || 0) * 1000)));
     });
   }
 

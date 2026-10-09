@@ -14,7 +14,7 @@ import { TaskStore } from './tasks';
 import { SetlistStore, generateSetlist, checkSetlist, type EventMeta } from './setlist';
 import { SettingsStore } from './settings';
 import { RequestStore } from './requests';
-import { analyze, MediaCache, createSourceRegistry, scanDanceDir, coreName, localMid, netease, type TrackMeta } from '@hdbc/dance-sdk';
+import { analyze, MediaCache, createSourceRegistry, scanDanceDir, coreName, localMid, extractCover, netease, type TrackMeta } from '@hdbc/dance-sdk';
 import { sendJson, readBody, parseCookies, setCookie, clearCookie } from './http';
 
 const MIME: Record<string, string> = {
@@ -829,6 +829,11 @@ export function createServer(cfg: BackendConfig) {
               if (isNew) {
                 added++;
                 newMids.push(d.id);
+                // 提取内嵌封面到缓存目录，供前端展示
+                const coverFile = d.id + '.jpg';
+                if (await extractCover(d.file, path.join(eff().mediaDir, coverFile))) {
+                  await library.updateSong(d.id, { coverUrl: '/media/' + coverFile });
+                }
               } else skipped++;
             }
           }

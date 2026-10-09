@@ -40,6 +40,7 @@ exports.createSourceRegistry = createSourceRegistry;
 const path_1 = __importDefault(require("path"));
 const crypto_1 = __importDefault(require("crypto"));
 const localscan_1 = require("../localscan");
+const media_1 = require("../media");
 const netease = __importStar(require("./netease"));
 function songToMeta(s) {
     return {
@@ -163,17 +164,18 @@ function createSourceRegistry(deps) {
                 if (!dir)
                     throw new Error('dir required');
                 const scanned = await (0, localscan_1.scanDanceDir)(path_1.default.resolve(dir), !!body.recursive);
-                const tracks = scanned.files.map((f) => ({
+                const tracks = await Promise.all(scanned.files.map(async (f) => ({
                     id: (0, localscan_1.localMid)(f.file),
                     name: f.name,
                     artists: f.artists,
                     album: null,
-                    durationMs: f.durationMs ?? 0,
+                    // 文件名没带时长就用 ffprobe 读真实时长
+                    durationMs: f.durationMs ?? (await (0, media_1.probeDurationMs)(f.file)),
                     coverUrl: null,
                     file: f.file,
                     local: true,
                     type: f.type,
-                }));
+                })));
                 return { name: path_1.default.resolve(dir), tracks, note: `扫描音频 ${scanned.audio}，文件名不合规 ${scanned.unparsed.length}` };
             },
         },

@@ -1,4 +1,8 @@
 import type { Logger, QQMusicClient, Quality } from '@hdbc/qqmusic-sdk';
+/** ffprobe 读音频时长（毫秒）；失败返回 0 */
+export declare function probeDurationMs(file: string): Promise<number>;
+/** 提取内嵌封面到 dest；成功且非空返回 true */
+export declare function extractCover(src: string, dest: string): Promise<boolean>;
 /** 本地音频缓存：下载成文件（统一转成 mp3），彻底摆脱运行时对 QQ 的依赖 */
 export declare class MediaCache {
     private readonly dir;
@@ -34,8 +38,6 @@ export declare class MediaCache {
     ensureFromUrl(url: string, mid: string, opts?: {
         expectedDurationMs?: number;
     }): Promise<string>;
-    /** 用 ffprobe 读音频时长（毫秒），失败返回 0 */
-    private probeDurationMs;
     /** 把下载到的文件归一化为 mp3：已是 mp3 直接改名；否则 ffmpeg 转码。 */
     private normalizeToMp3;
     private probeCodec;

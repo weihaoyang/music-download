@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import type { Song } from '@hdbc/qqmusic-sdk';
 import type { SourceDeps, TrackMeta, TrackSource } from './types';
 import { scanDanceDir, parseDanceFileName, localMid } from '../localscan';
+import { probeDurationMs } from '../media';
 import * as netease from './netease';
 
 function songToMeta(s: Song): TrackMeta {
@@ -126,17 +127,20 @@ export function createSourceRegistry(deps: SourceDeps): Map<string, TrackSource>
         const dir = String(body.dir || '');
         if (!dir) throw new Error('dir required');
         const scanned = await scanDanceDir(path.resolve(dir), !!body.recursive);
-        const tracks: TrackMeta[] = scanned.files.map((f) => ({
-          id: localMid(f.file),
-          name: f.name,
-          artists: f.artists,
-          album: null,
-          durationMs: f.durationMs ?? 0,
-          coverUrl: null,
-          file: f.file,
-          local: true,
-          type: f.type,
-        }));
+        const tracks: TrackMeta[] = await Promise.all(
+          scanned.files.map(async (f) => ({
+            id: localMid(f.file),
+            name: f.name,
+            artists: f.artists,
+            album: null,
+            // 文件名没带时长就用 ffprobe 读真实时长
+            durationMs: f.durationMs ?? (await probeDurationMs(f.file)),
+            coverUrl: null,
+            file: f.file,
+            local: true,
+            type: f.type,
+          })),
+        );
         return { name: path.resolve(dir), tracks, note: `扫描音频 ${scanned.audio}，文件名不合规 ${scanned.unparsed.length}` };
       },
     },

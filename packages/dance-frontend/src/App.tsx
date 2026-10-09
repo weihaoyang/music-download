@@ -153,6 +153,8 @@ export default function App() {
   const [generating, setGenerating] = useState(false);
   const [genIssues, setGenIssues] = useState<GenIssue[]>([]);
   const [status, setStatus] = useState<any>(null);
+  const [dups, setDups] = useState<Array<Array<{ mid: string; name: string; artists: string[]; type: string; source: string; file: boolean; durationMs: number }>> | null>(null);
+  const [dupOpen, setDupOpen] = useState(false);
 
   const [user, setUser] = useState<{ uin: string; nickname?: string | null; vip?: boolean } | null>(null);
   const [loginOpen, setLoginOpen] = useState(false);
@@ -213,6 +215,27 @@ export default function App() {
   }
   function loadStatus() {
     api('/api/status').then((r) => setStatus(r as unknown)).catch(() => {});
+  }
+  function findDuplicates() {
+    api<{ count: number; groups: Array<Array<{ mid: string; name: string; artists: string[]; type: string; source: string; file: boolean; durationMs: number }>> }>('/api/library/duplicates')
+      .then((r) => {
+        setDups(r.groups || []);
+        setDupOpen(true);
+        Toast.info(r.count ? `发现 ${r.count} 组重复曲目` : '没有发现重复');
+      })
+      .catch((e) => Toast.error('查重失败：' + e.message));
+  }
+  function keepOne(group: Array<{ mid: string }>, keepMid: string) {
+    setAdminToken(adminTokenState);
+    const del = group.filter((x) => x.mid !== keepMid);
+    Promise.all(del.map((x) => adminFetch('/api/library/song?mid=' + encodeURIComponent(x.mid), 'DELETE')))
+      .then(() => {
+        Toast.success(`已保留 1 条，移除 ${del.length} 条重复`);
+        findDuplicates();
+        loadTypes();
+        if (activeType) loadSongs(activeType);
+      })
+      .catch((e) => Toast.error('操作失败：' + e.message));
   }
   function loadSettings() {
     setAdminToken(adminTokenState);
@@ -874,6 +897,7 @@ export default function App() {
                     自动分类
                   </Button>
                   <Button onClick={cacheClassify}>缓存并分类</Button>
+                  <Button onClick={findDuplicates}>查重</Button>
                   <Button onClick={importLiked}>导入「我喜欢」</Button>
                 </div>
               </div>
@@ -1323,6 +1347,29 @@ export default function App() {
             </div>
           ) : null}
         </div>
+      </Modal>
+
+      <Modal title="重复曲目（跨来源）" visible={dupOpen} footer={null} width={600} onCancel={() => setDupOpen(false)}>
+        {dups && dups.length ? (
+          dups.map((g, gi) => (
+            <div key={gi} className="dup-group">
+              {g.map((s) => (
+                <div key={s.mid} className="dup-row">
+                  <span className={'chip ' + (s.source === 'qqmusic' ? 'chip-gold' : 'chip-src')}>{SOURCE_LABELS[s.source] || s.source}</span>
+                  <span className="dup-name">
+                    {s.name} · {(s.artists || []).join('/')} · {s.type}
+                    {s.file ? ' · 已缓存' : ''}
+                  </span>
+                  <Button size="small" onClick={() => keepOne(g, s.mid)}>
+                    保留此条
+                  </Button>
+                </div>
+              ))}
+            </div>
+          ))
+        ) : (
+          <div className="empty">没有发现重复曲目</div>
+        )}
       </Modal>
 
       <Modal title="设置（管理员）" visible={settingsOpen} footer={null} width={480} onCancel={() => setSettingsOpen(false)}>

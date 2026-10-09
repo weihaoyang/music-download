@@ -367,6 +367,27 @@ body {
   line-height: 1.7;
   word-break: break-all;
 }
+.dup-group {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  background: var(--surface-2);
+}
+.dup-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0;
+}
+.dup-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .divider {
   height: 1px;
   background: var(--line);

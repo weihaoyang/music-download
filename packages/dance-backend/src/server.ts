@@ -597,6 +597,18 @@ export function createServer(cfg: BackendConfig) {
       }
       return sendJson(res, 200, { ok: true, source, removed, purged });
     }
+    // 查重：同名(去修饰)+同歌手+时长接近 → 认为是同一首（可跨来源）
+    if (p === '/api/library/duplicates' && method === 'GET') {
+      const groups = new Map<string, Array<{ mid: string; name: string; artists: string[]; type: string; source: string; file: boolean; durationMs: number }>>();
+      for (const s of library.allSongs()) {
+        const key = `${coreName(s.name)}|${(s.artists[0] || '').toLowerCase()}|${Math.round((s.durationMs || 0) / 2000)}`;
+        const arr = groups.get(key) ?? [];
+        arr.push({ mid: s.mid, name: s.name, artists: s.artists, type: s.type, source: s.source || 'qqmusic', file: !!s.file, durationMs: s.durationMs });
+        groups.set(key, arr);
+      }
+      const dups = [...groups.values()].filter((g) => g.length > 1);
+      return sendJson(res, 200, { ok: true, count: dups.length, groups: dups });
+    }
     if (p === '/api/library/song' && method === 'PUT') {
       if (!isAdmin) return sendJson(res, 403, { ok: false, error: 'forbidden' });
       const body = await readBody(req);

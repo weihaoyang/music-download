@@ -865,6 +865,7 @@ export default function App() {
           ) : null}
           {isLib && lib.mood ? <span className={'chip ' + (lib.mood === '欢快' ? 'chip-lively' : lib.mood === '舒缓' ? 'chip-mellow' : 'chip-mid')}>{lib.mood}</span> : null}
           {isLib && lib.suitable === false ? <span className="chip chip-warn" title={lib.warning || '节奏不稳，可能不适合作为舞曲'}>不适合舞曲</span> : null}
+          {isLib && lib.needsReview ? <span className="chip chip-review" title="识别置信度低 / 贴近速度边界 / 拍号不明确，建议人工复核">需复核</span> : null}
           {isLib && lib.file ? <span className="chip chip-green">已缓存</span> : null}
           {isLib && lib.bpm ? <span className="bpm">{lib.bpm} BPM</span> : null}
           {s.durationMs ? <span className="bpm">{mmss(s.durationMs)}</span> : null}

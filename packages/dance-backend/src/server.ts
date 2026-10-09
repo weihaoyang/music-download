@@ -162,6 +162,7 @@ export function createServer(cfg: BackendConfig) {
         stability: r.stability,
         suitable: r.suitable,
         warning: r.warning,
+        needsReview: r.needsReview,
       });
     } catch (e) {
       cfg.logger.warn('[auto-classify]', mid, (e as Error)?.message);
@@ -269,6 +270,7 @@ export function createServer(cfg: BackendConfig) {
             stability: r.stability,
             suitable: r.suitable,
             warning: r.warning,
+            needsReview: r.needsReview,
           });
           tasks.setResult(taskId, s.mid, r);
           tasks.settle(taskId, s.mid, true);
@@ -308,6 +310,7 @@ export function createServer(cfg: BackendConfig) {
             stability: r.stability,
             suitable: r.suitable,
             warning: r.warning,
+            needsReview: r.needsReview,
           });
           tasks.setResult(taskId, s.mid, r);
           tasks.settle(taskId, s.mid, true);

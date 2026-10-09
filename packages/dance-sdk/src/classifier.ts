@@ -68,6 +68,10 @@ export interface AnalyzeResult {
   suitable: boolean;
   /** 不适合时的提示语 */
   warning: string | null;
+  /** 拍号判断置信度 0~1 */
+  meterConfidence: number;
+  /** 建议人工复核（低置信 / 贴近速度边界 / 拍号不明确） */
+  needsReview: boolean;
 }
 
 const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);
@@ -206,12 +210,16 @@ export function beatProminence(onset: number[], bpm: number): number {
   return base > 0 ? peak / base : 0;
 }
 
-/** 用节拍能量自相关判断 3/4 还是 4/4（仅用于校验置信度，不改变分类结果） */
-function detectMeter(onset: number[], bpm: number): '3/4' | '4/4' {
-  if (bpm <= 0) return '4/4';
+/** 用节拍能量自相关判断 3/4 还是 4/4，并给出置信度（按节拍级基线归一化） */
+function detectMeter(onset: number[], bpm: number): { meter: '3/4' | '4/4'; confidence: number } {
+  if (bpm <= 0) return { meter: '4/4', confidence: 0 };
   const envRate = SAMPLE_RATE / BUF_SIZE;
   const beat = (60 / bpm) * envRate;
-  return autoAt(onset, 3 * beat) > autoAt(onset, 4 * beat) * 1.15 ? '3/4' : '4/4';
+  const base = autoAt(onset, Math.max(1, Math.round(beat))) || 1e-9; // 节拍级基线
+  const r3 = autoAt(onset, 3 * beat) / base;
+  const r4 = autoAt(onset, 4 * beat) / base;
+  const confidence = Math.abs(r3 - r4) / Math.max(r3, r4, 1e-9);
+  return { meter: r3 > r4 * 1.05 ? '3/4' : '4/4', confidence: Math.round(confidence * 100) / 100 };
 }
 
 /**
@@ -286,16 +294,18 @@ export function classify(
   bpm: number,
   meter: '3/4' | '4/4',
   mood: Mood = '中',
+  meterConfidence = 1,
 ): { type: string | null; confidence: number } {
   if (!bpm || bpm <= 0) return { type: null, confidence: 0 };
   // 以「到各舞种中心值的距离（BPM 单位）」为主项；命中区间大幅优先；
   // 曲风/拍号只做约 ±3BPM 的微调 —— 避免 BPM 落在所有区间之外时被曲风带偏。
+  const trustMeter = meterConfidence >= 0.15;
   const score = (t: DanceType): number => {
     const inR = bpm >= t.min && bpm <= t.max;
     let s = -Math.abs(bpm - t.center);
     if (inR) s += 20;
     s += 3 * moodMatch(mood, t.mood);
-    if (meter === t.meter) s += 1.5;
+    if (trustMeter && meter === t.meter) s += 1.5;
     return s;
   };
   const inRange = DANCE_TYPES.filter((t) => bpm >= t.min && bpm <= t.max);
@@ -305,7 +315,7 @@ export function classify(
   const half = Math.max(1, (best.max - best.min) / 2);
   let confidence = Math.max(0.05, Math.min(1, 1 - Math.abs(bpm - best.center) / (half * 1.6)));
   confidence *= 0.75 + 0.25 * moodMatch(mood, best.mood); // 曲风不符时降信度
-  if (meter !== best.meter) confidence *= 0.9;
+  if (meterConfidence >= 0.15 && meter !== best.meter) confidence *= 0.9;
   return { type: best.type, confidence: Math.round(confidence * 100) / 100 };
 }
 
@@ -327,8 +337,8 @@ export async function analyze(file: string): Promise<AnalyzeResult> {
   while (bpm > 0 && bpm < 58) bpm *= 2;
   while (bpm > 205) bpm /= 2;
   bpm = Math.round(bpm);
-  const meter = detectMeter(onset, bpm);
-  const { type, confidence } = classify(bpm, meter, mood);
+  const { meter, confidence: meterConfidence } = detectMeter(onset, bpm);
+  const { type, confidence } = classify(bpm, meter, mood, meterConfidence);
 
   // 节奏稳定性：BPM 一致度 + 节拍清晰度 + 节拍显著度
   const clarity = pulseClarity(onset, bpm);
@@ -343,6 +353,9 @@ export async function analyze(file: string): Promise<AnalyzeResult> {
     : !suitable
       ? '节奏不稳或节拍不清晰，可能不适合作为舞曲'
       : null;
+  // 需人工复核：置信度低 / BPM 贴近区间边界 / 拍号不明确
+  const nearBoundary = DANCE_TYPES.some((t) => Math.abs(bpm - t.min) <= 4 || Math.abs(bpm - t.max) <= 4);
+  const needsReview = suitable && (confidence < 0.45 || nearBoundary || meterConfidence < 0.1);
   return {
     bpm,
     meter,
@@ -356,5 +369,7 @@ export async function analyze(file: string): Promise<AnalyzeResult> {
     onsetStrength,
     suitable,
     warning,
+    meterConfidence,
+    needsReview,
   };
 }

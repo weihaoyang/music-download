@@ -115,6 +115,8 @@ export interface LibrarySong {
   source?: string | null;
   /** schema v2：归属与溯源 */
   provenance?: { rights: 'external' | 'club'; edited: boolean; origin?: unknown; note?: string | null } | null;
+  /** 建议人工复核 */
+  needsReview?: boolean | null;
 }
 
 export interface Song {

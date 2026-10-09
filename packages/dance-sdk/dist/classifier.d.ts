@@ -40,6 +40,10 @@ export interface AnalyzeResult {
     suitable: boolean;
     /** 不适合时的提示语 */
     warning: string | null;
+    /** 拍号判断置信度 0~1 */
+    meterConfidence: number;
+    /** 建议人工复核（低置信 / 贴近速度边界 / 拍号不明确） */
+    needsReview: boolean;
 }
 /** ffmpeg 解码为单声道 22050Hz f32le PCM（最多取前 90 秒足够测速） */
 export declare function decode(file: string): Promise<Float32Array>;
@@ -77,7 +81,7 @@ export declare function estimateEnergy(pcm: Float32Array, onset: number[]): {
     onsetStrength: number;
 };
 /** BPM -> 舞种：命中区间优先（并用曲风破同分），否则取最近中心 */
-export declare function classify(bpm: number, meter: '3/4' | '4/4', mood?: Mood): {
+export declare function classify(bpm: number, meter: '3/4' | '4/4', mood?: Mood, meterConfidence?: number): {
     type: string | null;
     confidence: number;
 };

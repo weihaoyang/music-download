@@ -16,6 +16,7 @@ import {
   Typography,
 } from '@douyinfe/semi-ui';
 import html2canvas from 'html2canvas';
+import QRCode from 'qrcode';
 import { adminFetch, api, post, getAdminToken, setAdminToken, setQueue as storeQueue, getTheme, setTheme, type ThemeMode, type LibrarySong, type Song, type TaskItem } from './api';
 
 const { Title, Text } = Typography;
@@ -155,6 +156,9 @@ export default function App() {
   const [status, setStatus] = useState<any>(null);
   const [dups, setDups] = useState<Array<Array<{ mid: string; name: string; artists: string[]; type: string; source: string; file: boolean; durationMs: number }>> | null>(null);
   const [dupOpen, setDupOpen] = useState(false);
+  const [reqs, setReqs] = useState<Array<{ id: string; name: string; artists: string[]; requester?: string | null; note?: string | null; status: string }>>([]);
+  const [reqStats, setReqStats] = useState<{ active: number; totalLimit: number; perRequesterLimit: number } | null>(null);
+  const [reqQr, setReqQr] = useState('');
 
   const [user, setUser] = useState<{ uin: string; nickname?: string | null; vip?: boolean } | null>(null);
   const [loginOpen, setLoginOpen] = useState(false);
@@ -215,6 +219,43 @@ export default function App() {
   }
   function loadStatus() {
     api('/api/status').then((r) => setStatus(r as unknown)).catch(() => {});
+  }
+  function loadRequests() {
+    api<{ data: typeof reqs; stats: typeof reqStats }>('/api/requests')
+      .then((r) => {
+        setReqs(r.data || []);
+        setReqStats(r.stats);
+      })
+      .catch(() => {});
+    if (!reqQr) QRCode.toDataURL(window.location.origin + '/request', { width: 200, margin: 1 }).then(setReqQr).catch(() => {});
+  }
+  function setReqStatus(id: string, status: string) {
+    setAdminToken(adminTokenState);
+    adminFetch('/api/requests/' + encodeURIComponent(id), 'POST', { status })
+      .then(() => loadRequests())
+      .catch((e) => Toast.error('操作失败：' + e.message));
+  }
+  function delReq(id: string) {
+    setAdminToken(adminTokenState);
+    adminFetch('/api/requests/' + encodeURIComponent(id), 'DELETE')
+      .then(() => loadRequests())
+      .catch((e) => Toast.error('操作失败：' + e.message));
+  }
+  function resetReqs() {
+    setAdminToken(adminTokenState);
+    Modal.confirm({
+      title: '清空点歌',
+      content: '确定清空本场点歌队列吗？（用于开始新一场舞会）',
+      okText: '清空',
+      cancelText: '取消',
+      onOk: () =>
+        adminFetch<{ cleared: number }>('/api/requests/reset', 'POST')
+          .then((r) => {
+            Toast.success(`已清空 ${r.cleared} 条`);
+            loadRequests();
+          })
+          .catch((e) => Toast.error('失败：' + e.message)),
+    });
   }
   function findDuplicates() {
     api<{ count: number; groups: Array<Array<{ mid: string; name: string; artists: string[]; type: string; source: string; file: boolean; durationMs: number }>> }>('/api/library/duplicates')
@@ -341,6 +382,7 @@ export default function App() {
   }, [activeType]);
   useEffect(() => {
     if (activeTab === 'status') loadStatus();
+    if (activeTab === 'requests') loadRequests();
   }, [activeTab]);
   useEffect(() => {
     if (!task || task.status === 'done') return;
@@ -1235,6 +1277,67 @@ export default function App() {
                   还没有保存的排曲
                 </div>
               )}
+            </div>
+          </TabPane>
+
+          <TabPane tab="点歌" itemKey="requests">
+            <div className="panel">
+              <div className="panel-head">
+                <span className="panel-title">点歌队列</span>
+                <div className="panel-actions">
+                  {reqStats ? <span className="hint">已点 {reqStats.active}/{reqStats.totalLimit} · 每人 ≤{reqStats.perRequesterLimit}</span> : null}
+                  <Button onClick={loadRequests}>刷新</Button>
+                  <Button theme="borderless" type="danger" onClick={resetReqs}>
+                    清空（新一场）
+                  </Button>
+                </div>
+              </div>
+              <div className="req-wrap">
+                <div className="req-list">
+                  {reqs.length ? (
+                    reqs.map((r) => (
+                      <div key={r.id} className="req-item">
+                        <span className="req-name">{r.name}</span>
+                        <span className="req-sub">
+                          {(r.artists || []).join('/')}
+                          {r.requester ? ' · ' + r.requester : ''}
+                          {r.note ? ' · ' + r.note : ''}
+                        </span>
+                        <span className={'chip ' + (r.status === 'accepted' ? 'chip-green' : r.status === 'rejected' ? 'chip-warn' : r.status === 'played' ? 'chip-gold' : 'chip-mid')}>
+                          {r.status === 'accepted' ? '已采纳' : r.status === 'rejected' ? '已拒绝' : r.status === 'played' ? '已播放' : '待处理'}
+                        </span>
+                        <span className="req-actions">
+                          {r.status !== 'accepted' ? (
+                            <Button size="small" onClick={() => setReqStatus(r.id, 'accepted')}>
+                              采纳
+                            </Button>
+                          ) : null}
+                          {r.status === 'accepted' ? (
+                            <Button size="small" theme="borderless" onClick={() => setReqStatus(r.id, 'played')}>
+                              已播
+                            </Button>
+                          ) : null}
+                          {r.status !== 'rejected' ? (
+                            <Button size="small" theme="borderless" onClick={() => setReqStatus(r.id, 'rejected')}>
+                              拒绝
+                            </Button>
+                          ) : null}
+                          <Button size="small" theme="borderless" type="danger" onClick={() => delReq(r.id)}>
+                            删除
+                          </Button>
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="empty">还没有人点歌</div>
+                  )}
+                </div>
+                <div className="req-qr">
+                  <div className="hint">扫码点歌（手机打开）</div>
+                  {reqQr ? <img src={reqQr} alt="点歌二维码" /> : null}
+                  <div className="hint">{window.location.origin}/request</div>
+                </div>
+              </div>
             </div>
           </TabPane>
 

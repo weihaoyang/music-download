@@ -13,6 +13,7 @@ import { ClientPool } from './clients';
 import { TaskStore } from './tasks';
 import { SetlistStore, generateSetlist, checkSetlist, type EventMeta } from './setlist';
 import { SettingsStore } from './settings';
+import { RequestStore } from './requests';
 import { analyze, MediaCache, createSourceRegistry, scanDanceDir, coreName, localMid, netease, type TrackMeta } from '@hdbc/dance-sdk';
 import { sendJson, readBody, parseCookies, setCookie, clearCookie } from './http';
 
@@ -77,6 +78,7 @@ export function createServer(cfg: BackendConfig) {
   const library = new LibraryStore(path.join(cfg.dataDir, 'tracks.json'), path.join(cfg.dataDir, 'library.json'));
   const setlists = new SetlistStore(path.join(cfg.dataDir, 'setlists.json'));
   const settings = new SettingsStore(path.join(cfg.dataDir, 'settings.json'));
+  const requests = new RequestStore(path.join(cfg.dataDir, 'requests.json'));
   const tasks = new TaskStore();
   const pool = new ClientPool(cfg.bridgeUrl, cfg.logger);
   const sources = createSourceRegistry({ qqAnonymous: () => pool.anonymous(), qqLibrary: () => pool.libraryClient() });
@@ -116,7 +118,7 @@ export function createServer(cfg: BackendConfig) {
     return library.list(type);
   }
 
-  const ready = Promise.all([sessions.load(), library.load(), setlists.load(), settings.load()]).then(() => {
+  const ready = Promise.all([sessions.load(), library.load(), setlists.load(), settings.load(), requests.load()]).then(() => {
     const e = eff();
     media = new MediaCache(e.mediaDir, e.mediaQuality, e.downloadConcurrency, cfg.logger);
     netease.setNeteaseCookie(e.neteaseCookie);
@@ -386,6 +388,51 @@ export function createServer(cfg: BackendConfig) {
         tasks: tasks.list().slice(0, 5).map((t) => ({ id: t.id, kind: t.kind, status: t.status, total: t.total, done: t.done, failed: t.failed, error: t.errors ? Object.values(t.errors)[0] : undefined })),
         deps: { ffmpeg: ffmpegAvailable() },
       });
+    }
+
+    /* --------------------- 点歌（每场 ≤4、每人 ≤1，可在 config 调整） --------------------- */
+    if (p === '/api/requests' && method === 'GET') {
+      return sendJson(res, 200, { ok: true, data: requests.list(), stats: requests.stats() });
+    }
+    if (p === '/api/requests' && method === 'POST') {
+      const body = await readBody(req);
+      const name = String(body.name || '').trim();
+      if (!name) return sendJson(res, 400, { ok: false, error: 'name required' });
+      const check = requests.canAdd(body.requester ? String(body.requester) : undefined);
+      if (!check.ok) return sendJson(res, 409, { ok: false, error: 'LIMIT', message: check.reason });
+      const row = await requests.add({
+        name,
+        artists: Array.isArray(body.artists) ? (body.artists as unknown[]).map(String) : [],
+        mid: body.mid ? String(body.mid) : null,
+        source: body.source ? String(body.source) : null,
+        type: body.type ? String(body.type) : null,
+        note: body.note ? String(body.note) : null,
+        requester: body.requester ? String(body.requester) : null,
+      });
+      return sendJson(res, 200, { ok: true, data: row, stats: requests.stats() });
+    }
+    if (p === '/api/requests/reset' && method === 'POST') {
+      if (!isAdmin) return sendJson(res, 403, { ok: false, error: 'forbidden' });
+      const n = await requests.reset();
+      return sendJson(res, 200, { ok: true, cleared: n, stats: requests.stats() });
+    }
+    {
+      const m = p.match(/^\/api\/requests\/([^/]+)$/);
+      if (m && method === 'POST') {
+        if (!isAdmin) return sendJson(res, 403, { ok: false, error: 'forbidden' });
+        const body = await readBody(req);
+        const status = String(body.status || '');
+        if (!['pending', 'accepted', 'rejected', 'played'].includes(status)) return sendJson(res, 400, { ok: false, error: 'bad status' });
+        const row = await requests.update(m[1], { status: status as 'pending' | 'accepted' | 'rejected' | 'played' });
+        if (!row) return sendJson(res, 404, { ok: false, error: 'not found' });
+        return sendJson(res, 200, { ok: true, data: row, stats: requests.stats() });
+      }
+      if (m && method === 'DELETE') {
+        if (!isAdmin) return sendJson(res, 403, { ok: false, error: 'forbidden' });
+        const ok = await requests.remove(m[1]);
+        if (!ok) return sendJson(res, 404, { ok: false, error: 'not found' });
+        return sendJson(res, 200, { ok: true, stats: requests.stats() });
+      }
     }
 
     /* ------------------------------ 运行时设置 ------------------------------ */

@@ -171,6 +171,9 @@ export default function App() {
   const [addType, setAddType] = useState('未分类');
   const [sourceFilter, setSourceFilter] = useState('all');
   const [libPage, setLibPage] = useState(0);
+  const [libSort, setLibSort] = useState('default');
+  const [selectedMids, setSelectedMids] = useState<Set<string>>(new Set());
+  const [batchType, setBatchType] = useState('');
   const [importSource, setImportSource] = useState<'qqmusic' | 'netease' | 'local' | 'http'>('qqmusic');
   const [neInput, setNeInput] = useState('');
   const [localDir, setLocalDir] = useState('');
@@ -496,7 +499,10 @@ export default function App() {
   }, [activeType]);
   useEffect(() => {
     setLibPage(0);
-  }, [activeType, sourceFilter]);
+  }, [activeType, sourceFilter, libSort]);
+  useEffect(() => {
+    setSelectedMids(new Set());
+  }, [activeType]);
   useEffect(() => {
     if (activeTab === 'status') loadStatus();
     if (activeTab === 'status') loadHistory();
@@ -667,6 +673,50 @@ export default function App() {
             if (activeType) loadSongs(activeType);
           })
           .catch((e) => Toast.error('移除失败：' + e.message));
+      },
+    });
+  }
+  function toggleSelect(mid: string) {
+    setSelectedMids((cur) => {
+      const next = new Set(cur);
+      if (next.has(mid)) next.delete(mid);
+      else next.add(mid);
+      return next;
+    });
+  }
+  function batchChangeType() {
+    const mids = [...selectedMids];
+    if (!mids.length) return;
+    if (!batchType) return Toast.warning('先选目标舞种');
+    setAdminToken(adminTokenState);
+    Promise.all(mids.map((mid) => adminFetch('/api/library/song', 'PUT', { mid, type: batchType })))
+      .then(() => {
+        Toast.success(`已把 ${mids.length} 首改为「${batchType}」`);
+        setSelectedMids(new Set());
+        setBatchType('');
+        loadTypes();
+        if (activeType) loadSongs(activeType);
+      })
+      .catch((e) => Toast.error('批量改舞种失败：' + e.message));
+  }
+  function batchRemove() {
+    const mids = [...selectedMids];
+    if (!mids.length) return;
+    Modal.confirm({
+      title: `移除选中的 ${mids.length} 首？`,
+      content: '只删除曲库记录，不删除磁盘上的音频文件。',
+      okText: '移除',
+      cancelText: '取消',
+      onOk: () => {
+        setAdminToken(adminTokenState);
+        return Promise.all(mids.map((mid) => adminFetch('/api/library/song?mid=' + encodeURIComponent(mid), 'DELETE')))
+          .then(() => {
+            Toast.success(`已移除 ${mids.length} 首`);
+            setSelectedMids(new Set());
+            loadTypes();
+            if (activeType) loadSongs(activeType);
+          })
+          .catch((e) => Toast.error('批量移除失败：' + e.message));
       },
     });
   }
@@ -978,21 +1028,28 @@ export default function App() {
     const head = liked ? [{ label: `我喜欢（${liked.count}）`, value: '__liked__' }] : [];
     return [...head, ...typeOptions];
   }, [types, typeOptions]);
-  const libSongs = useMemo(
-    () => (sourceFilter === 'all' ? songs : songs.filter((s) => (s.source || 'qqmusic') === sourceFilter)),
-    [songs, sourceFilter],
-  );
+  const libSongs = useMemo(() => {
+    const base = sourceFilter === 'all' ? songs : songs.filter((s) => (s.source || 'qqmusic') === sourceFilter);
+    if (libSort === 'default') return base;
+    const arr = [...base];
+    if (libSort === 'bpm-asc') arr.sort((a, b) => (a.bpm ?? 9999) - (b.bpm ?? 9999));
+    else if (libSort === 'bpm-desc') arr.sort((a, b) => (b.bpm ?? -1) - (a.bpm ?? -1));
+    else if (libSort === 'plays') arr.sort((a, b) => (b.playCount ?? 0) - (a.playCount ?? 0));
+    else if (libSort === 'name') arr.sort((a, b) => a.name.localeCompare(b.name, 'zh'));
+    return arr;
+  }, [songs, sourceFilter, libSort]);
   const LIB_PAGE = 50;
   const libPageCount = Math.max(1, Math.ceil(libSongs.length / LIB_PAGE));
   const libPageSongs = useMemo(() => libSongs.slice(libPage * LIB_PAGE, libPage * LIB_PAGE + LIB_PAGE), [libSongs, libPage]);
   const orderArr = useMemo(() => orderText.split(/[\s,，、→>/-]+/).filter(Boolean), [orderText]);
   const shownResults = useMemo(() => (hideInLib ? results.filter((r) => !r.inLibrary) : results), [results, hideInLib]);
 
-  function SongRow({ s, list, onAdd, onDownload, onClip }: { s: LibrarySong | Song; list: Array<LibrarySong | Song>; onAdd?: () => void; onDownload?: () => void; onClip?: () => void }) {
+  function SongRow({ s, list, onAdd, onDownload, onClip, selected, onToggleSelect }: { s: LibrarySong | Song; list: Array<LibrarySong | Song>; onAdd?: () => void; onDownload?: () => void; onClip?: () => void; selected?: boolean; onToggleSelect?: () => void }) {
     const isLib = 'type' in s;
     const lib = s as LibrarySong;
     return (
-      <div className="song">
+      <div className={'song' + (onToggleSelect ? ' selectable' : '')}>
+        {onToggleSelect ? <input type="checkbox" className="song-pick" checked={!!selected} onChange={onToggleSelect} aria-label="选择" /> : null}
         {s.coverUrl ? <img className="song-cover" src={s.coverUrl} alt="" onError={(e) => ((e.target as HTMLImageElement).style.visibility = 'hidden')} /> : <div className="song-cover" />}
         <div className="song-main">
           <div className="song-name">{s.name}</div>
@@ -1114,6 +1171,18 @@ export default function App() {
                     style={{ width: 130 }}
                     optionList={[{ value: 'all', label: '全部来源' }, ...SOURCE_OPTIONS]}
                   />
+                  <Select
+                    value={libSort}
+                    onChange={(v) => setLibSort(v as string)}
+                    style={{ width: 130 }}
+                    optionList={[
+                      { value: 'default', label: '默认排序' },
+                      { value: 'bpm-asc', label: 'BPM ↑' },
+                      { value: 'bpm-desc', label: 'BPM ↓' },
+                      { value: 'plays', label: '播放次数' },
+                      { value: 'name', label: '歌名' },
+                    ]}
+                  />
                   {sourceFilter !== 'all' ? (
                     <>
                       <Button onClick={downloadBySource}>缓存本来源</Button>
@@ -1131,11 +1200,26 @@ export default function App() {
                   <Button onClick={importLiked}>导入「我喜欢」</Button>
                 </div>
               </div>
+              {selectedMids.size ? (
+                <div className="batch-bar">
+                  <span className="hint">已选 {selectedMids.size} 首</span>
+                  <Select value={batchType} onChange={(v) => setBatchType(v as string)} style={{ width: 150 }} optionList={typeOptions} placeholder="改为舞种" />
+                  <Button theme="solid" size="small" onClick={batchChangeType}>
+                    应用舞种
+                  </Button>
+                  <Button theme="borderless" type="danger" size="small" onClick={batchRemove}>
+                    移除选中
+                  </Button>
+                  <Button theme="borderless" size="small" onClick={() => setSelectedMids(new Set())}>
+                    取消选择
+                  </Button>
+                </div>
+              ) : null}
               {libSongs.length ? (
                 <>
                   <div className="songlist">
                     {libPageSongs.map((s) => (
-                      <SongRow key={s.mid} s={s} list={libSongs} />
+                      <SongRow key={s.mid} s={s} list={libSongs} selected={selectedMids.has(s.mid)} onToggleSelect={() => toggleSelect(s.mid)} />
                     ))}
                   </div>
                   {libPageCount > 1 ? (

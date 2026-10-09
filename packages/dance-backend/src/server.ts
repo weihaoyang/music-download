@@ -510,6 +510,9 @@ export function createServer(cfg: BackendConfig) {
       data.push({ type: '__liked__', count: liked.length, cached: liked.filter((s) => s.file).length });
       return sendJson(res, 200, { ok: true, data });
     }
+    if (p === '/api/library/stats' && method === 'GET') {
+      return sendJson(res, 200, { ok: true, data: library.stats() });
+    }
     if (p === '/api/library/list' && method === 'GET') {
       if (url.searchParams.get('liked')) return sendJson(res, 200, { ok: true, type: '__liked__', songs: library.likedSongs() });
       const type = url.searchParams.get('type') || '';

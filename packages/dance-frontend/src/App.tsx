@@ -116,6 +116,35 @@ function IconBtn({ title, danger, onClick, children }: { title: string; danger?:
   );
 }
 
+function StatBars({ title, items }: { title: string; items: Array<{ label: string; value: number; sub?: string }> }) {
+  const max = Math.max(1, ...items.map((i) => i.value));
+  return (
+    <div className="status-card">
+      <div className="sc-title">{title}</div>
+      <div className="stat-bars">
+        {items.length ? (
+          items.map((it) => (
+            <div className="stat-row" key={it.label}>
+              <span className="stat-label" title={it.label}>
+                {it.label}
+              </span>
+              <span className="stat-track">
+                <span className="stat-fill" style={{ width: Math.round((it.value / max) * 100) + '%' }} />
+              </span>
+              <span className="stat-val">
+                {it.value}
+                {it.sub ? ' · ' + it.sub : ''}
+              </span>
+            </div>
+          ))
+        ) : (
+          <div className="hint">暂无数据</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('lib');
   const [types, setTypes] = useState<Array<{ type: string; count: number; cached: number }>>([]);
@@ -159,6 +188,7 @@ export default function App() {
   const [savedLists, setSavedLists] = useState<Array<{ id: string; name: string; count: number; totalMs: number }>>([]);
   const [generating, setGenerating] = useState(false);
   const [genIssues, setGenIssues] = useState<GenIssue[]>([]);
+  const [libStats, setLibStats] = useState<any>(null);
   const [status, setStatus] = useState<any>(null);
   const [history, setHistory] = useState<Array<{ mid: string; name: string; artists: string[]; type: string; coverUrl?: string | null; at: number }>>([]);
   const [dups, setDups] = useState<Array<Array<{ mid: string; name: string; artists: string[]; type: string; source: string; file: boolean; durationMs: number }>> | null>(null);
@@ -233,6 +263,11 @@ export default function App() {
   }
   function loadStatus() {
     api('/api/status').then((r) => setStatus(r as unknown)).catch(() => {});
+  }
+  function loadStats() {
+    api<{ data: any }>('/api/library/stats')
+      .then((r) => setLibStats(r.data))
+      .catch(() => {});
   }
   function loadHistory() {
     api<{ data: typeof history }>('/api/history?limit=200')
@@ -416,6 +451,7 @@ export default function App() {
   useEffect(() => {
     if (activeTab === 'status') loadStatus();
     if (activeTab === 'status') loadHistory();
+    if (activeTab === 'stats') loadStats();
     if (activeTab === 'requests') loadRequests();
   }, [activeTab]);
   useEffect(() => {
@@ -1451,6 +1487,71 @@ export default function App() {
                   ))}
                 </div>
               ) : null}
+            </div>
+          </TabPane>
+
+          <TabPane tab="统计" itemKey="stats">
+            <div className="panel">
+              <div className="panel-head">
+                <span className="panel-title">曲库统计</span>
+                <div className="panel-actions">
+                  <Button onClick={loadStats}>刷新</Button>
+                </div>
+              </div>
+              {libStats ? (
+                <>
+                  <div className="status-grid">
+                    <div className="status-card">
+                      <div className="sc-title">规模</div>
+                      <div className="sc-body">
+                        共 {libStats.total} 首 · 已缓存 {libStats.cached}
+                        {libStats.total ? `（${Math.round((libStats.cached / libStats.total) * 100)}%）` : ''}
+                        <br />
+                        我喜欢 {libStats.liked} · 已识别 BPM {libStats.analyzed}
+                      </div>
+                    </div>
+                    <div className="status-card">
+                      <div className="sc-title">需要关注</div>
+                      <div className="sc-body">
+                        需复核 {libStats.needsReview} · 不适合舞曲 {libStats.unsuitable}
+                        <br />
+                        有响度数据 {libStats.loudness}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="stat-grid">
+                    <StatBars
+                      title="舞种分布"
+                      items={(libStats.byType as Array<{ type: string; count: number; cached: number }>)
+                        .filter((t) => t.type !== '__liked__' && t.count > 0)
+                        .sort((a, b) => b.count - a.count)
+                        .map((t) => ({ label: t.type, value: t.count, sub: `缓存 ${t.cached}` }))}
+                    />
+                    <StatBars title="BPM 分布" items={(libStats.bpm as Array<{ range: string; count: number }>).filter((b) => b.count > 0).map((b) => ({ label: b.range, value: b.count }))} />
+                    <StatBars title="曲风分布" items={(libStats.mood as Array<{ mood: string; count: number }>).filter((m) => m.count > 0).map((m) => ({ label: m.mood, value: m.count }))} />
+                    <StatBars
+                      title="来源分布"
+                      items={(libStats.bySource as Array<{ source: string; count: number }>).map((s) => ({ label: SOURCE_LABELS[s.source] || s.source, value: s.count }))}
+                    />
+                  </div>
+                  <div className="status-card" style={{ marginTop: 12 }}>
+                    <div className="sc-title">最常播放 Top</div>
+                    <div className="sc-body">
+                      {(libStats.topPlayed as Array<{ mid: string; name: string; artists: string[]; type: string; playCount: number }>).length ? (
+                        (libStats.topPlayed as Array<{ mid: string; name: string; artists: string[]; type: string; playCount: number }>).map((s, i) => (
+                          <div key={s.mid}>
+                            {i + 1}. {s.name} — {(s.artists || []).join('/')} · {s.type} · 已播 {s.playCount}
+                          </div>
+                        ))
+                      ) : (
+                        <span className="hint">还没有播放记录</span>
+                      )}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="empty">加载中…</div>
+              )}
             </div>
           </TabPane>
 

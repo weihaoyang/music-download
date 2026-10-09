@@ -781,3 +781,9 @@ D:\music-download\
 - **本场已播提示**：命中曲目本场（最近 6 小时）已播过 → 仍收下，但返回 `warnings: ['这首歌本场可能已播放过']`，`/request` 页以 warning 提示（防止重复点同一首）。
 - **热门点歌（跨场累计）**：`requests.json` 升级为 `{ items, tally }`（旧数组自动兼容）；每次点歌累计 tally（按 mid，无 mid 则按 歌名+歌手），`reset()`（新一场）**只清队列、保留热度**。`GET /api/requests` 返回 `popular`（Top 10）；控制台「点歌」Tab 新增「热门点歌 Top（跨场累计）」列表。
 - **实测**：首点 200（count=1）→ 同曲再点 409 DUPLICATE；`popular` 正确；`reset` 后 items=0、popular 保留；对已播曲点歌 → `warnings` 命中；`smoke-v6` 27/27、`smoke-v7` 14/14；控制台「点歌」Tab 与 `/request` 页均正常渲染、无 console 报错。
+
+## 39. 曲库统计页（✅ 已完成并实测）
+
+- **后端**：`LibraryStore.stats()` + `GET /api/library/stats`（公开只读聚合，避免前端拉全库计算）：总数 / 已缓存 / 我喜欢 / 已识别 BPM / 需复核 / 不适合 / 有响度；`byType`（含 cached）、`bySource`、`bpm`（固定 8 段直方图：<80 / 80–100 / … / ≥200）、`mood`（舒缓 / 中 / 欢快）、`topPlayed`（Top 10 按 `playCount`）。
+- **前端**：新增「统计」Tab（在「点歌」与「状态」之间）：规模 / 需要关注两张卡片 + 舞种 / BPM / 曲风 / 来源四条 CSS 条形分布（**无图表库、无 CDN**）+「最常播放 Top」。条形宽度按组内最大值归一。
+- **实测**：`/api/library/stats` 返回正确（共 1013 首、缓存 50、我喜欢 1005、已识别 BPM 50、需复核 12、不适合 20）；「统计」Tab 渲染 7 张卡片、18 条分布条、「最常播放 Top」，无 console 报错；`smoke-v6` 27/27、`smoke-v7` 14/14。

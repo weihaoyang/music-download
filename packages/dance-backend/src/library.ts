@@ -237,6 +237,72 @@ export class LibraryStore {
     return this.data[type] ?? [];
   }
 
+  /** 曲库统计（舞种/BPM/曲风/来源分布 + 最常播放），供「统计」页使用 */
+  stats(): {
+    total: number;
+    cached: number;
+    liked: number;
+    needsReview: number;
+    unsuitable: number;
+    analyzed: number;
+    loudness: number;
+    byType: Array<{ type: string; count: number; cached: number }>;
+    bySource: Array<{ source: string; count: number }>;
+    bpm: Array<{ range: string; count: number }>;
+    mood: Array<{ mood: string; count: number }>;
+    topPlayed: Array<{ mid: string; name: string; artists: string[]; type: string; playCount: number }>;
+  } {
+    const all = this.allSongs();
+    const bpmRanges = ['<80', '80–100', '100–120', '120–140', '140–160', '160–180', '180–200', '≥200'];
+    const bpmMap: Record<string, number> = Object.fromEntries(bpmRanges.map((r) => [r, 0]));
+    const bucketOf = (b: number): string =>
+      b < 80 ? '<80' : b < 100 ? '80–100' : b < 120 ? '100–120' : b < 140 ? '120–140' : b < 160 ? '140–160' : b < 180 ? '160–180' : b < 200 ? '180–200' : '≥200';
+    const sourceMap: Record<string, number> = {};
+    const moodMap: Record<string, number> = {};
+    let cached = 0;
+    let liked = 0;
+    let needsReview = 0;
+    let unsuitable = 0;
+    let analyzed = 0;
+    let loudness = 0;
+    for (const s of all) {
+      const src = s.source || 'qqmusic';
+      sourceMap[src] = (sourceMap[src] ?? 0) + 1;
+      if (s.file) cached++;
+      if (s.liked) liked++;
+      if (s.needsReview) needsReview++;
+      if (s.suitable === false) unsuitable++;
+      if (typeof s.bpm === 'number' && s.bpm > 0) {
+        analyzed++;
+        bpmMap[bucketOf(s.bpm)]++;
+      }
+      if (s.mood) moodMap[s.mood] = (moodMap[s.mood] ?? 0) + 1;
+      if (s.loudness != null) loudness++;
+    }
+    const moodOrder = ['舒缓', '中', '欢快'];
+    const moodList = [...moodOrder.map((m) => ({ mood: m, count: moodMap[m] ?? 0 })), ...Object.entries(moodMap).filter(([m]) => !moodOrder.includes(m)).map(([mood, count]) => ({ mood, count }))];
+    return {
+      total: all.length,
+      cached,
+      liked,
+      needsReview,
+      unsuitable,
+      analyzed,
+      loudness,
+      byType: this.types(),
+      bySource: Object.entries(sourceMap)
+        .map(([source, count]) => ({ source, count }))
+        .sort((a, b) => b.count - a.count),
+      bpm: bpmRanges.map((range) => ({ range, count: bpmMap[range] })),
+      mood: moodList,
+      topPlayed: all
+        .filter((s) => s.playCount)
+        .sort((a, b) => (b.playCount ?? 0) - (a.playCount ?? 0))
+        .slice(0, 10)
+        .map((s) => ({ mid: s.mid, name: s.name, artists: s.artists, type: s.type, playCount: s.playCount ?? 0 })),
+    };
+  }
+
   allSongs(): LibrarySong[] {
     return Object.values(this.data).flat();
   }

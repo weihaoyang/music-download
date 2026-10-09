@@ -17,6 +17,8 @@ exports.songUrl = songUrl;
 exports.lyric = lyric;
 exports.playlistDetail = playlistDetail;
 exports.extractNeId = extractNeId;
+exports.qrStart = qrStart;
+exports.qrCheck = qrCheck;
 let neteaseCookie = '';
 /** 设置网易云登录 Cookie（MUSIC_U=...）。空串=匿名。 */
 function setNeteaseCookie(cookie) {
@@ -128,5 +130,30 @@ function extractNeId(input) {
     if (pl)
         return { kind: 'playlist', id: pl[1] };
     return null;
+}
+/* ---------------------------- 网易云扫码登录 ---------------------------- */
+/** 获取登录二维码：返回 unikey（token）与二维码里要编码的 URL */
+async function qrStart(signal) {
+    const j = await getJson('/api/login/qrcode/unikey?type=1', signal);
+    if (!j?.unikey)
+        throw new Error('获取网易云二维码失败');
+    const token = String(j.unikey);
+    return { token, url: 'https://music.163.com/login?codekey=' + encodeURIComponent(token) };
+}
+/** 轮询扫码状态；confirmed 时返回登录 Cookie（MUSIC_U） */
+async function qrCheck(token, signal) {
+    const r = await fetch(`${BASE}/api/login/qrcode/client/login?type=1&key=${encodeURIComponent(token)}`, { headers: headers(), signal });
+    const j = (await r.json().catch(() => ({})));
+    const code = Number(j?.code);
+    if (code === 803) {
+        const setc = (r.headers.getSetCookie?.() ?? []).map((c) => c.split(';')[0]);
+        const cookie = setc.filter((c) => /MUSIC_U=|__csrf=/.test(c)).join('; ');
+        return { state: 'confirmed', cookie };
+    }
+    if (code === 802)
+        return { state: 'scanned' };
+    if (code === 800)
+        return { state: 'expired' };
+    return { state: 'pending' };
 }
 //# sourceMappingURL=netease.js.map

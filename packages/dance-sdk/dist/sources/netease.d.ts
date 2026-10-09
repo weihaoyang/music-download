@@ -52,4 +52,14 @@ export declare function extractNeId(input: string): {
     kind: 'playlist' | 'song';
     id: string;
 } | null;
+/** 获取登录二维码：返回 unikey（token）与二维码里要编码的 URL */
+export declare function qrStart(signal?: AbortSignal): Promise<{
+    token: string;
+    url: string;
+}>;
+/** 轮询扫码状态；confirmed 时返回登录 Cookie（MUSIC_U） */
+export declare function qrCheck(token: string, signal?: AbortSignal): Promise<{
+    state: 'pending' | 'scanned' | 'confirmed' | 'expired';
+    cookie?: string;
+}>;
 //# sourceMappingURL=netease.d.ts.map

@@ -173,6 +173,10 @@ export default function App() {
   const [qr, setQr] = useState<{ token: string; image: string } | null>(null);
   const [qrState, setQrState] = useState('');
   const pollRef = useRef<number | null>(null);
+  const [neLoginOpen, setNeLoginOpen] = useState(false);
+  const [neQrImg, setNeQrImg] = useState('');
+  const [neState, setNeState] = useState('');
+  const nePollRef = useRef<number | null>(null);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [theme, setThemeState] = useState<ThemeMode>(getTheme());
@@ -383,6 +387,7 @@ export default function App() {
     api<{ user: typeof user }>('/api/auth/me').then((r) => setUser(r.user)).catch(() => {});
     return () => {
       if (pollRef.current) window.clearInterval(pollRef.current);
+      if (nePollRef.current) window.clearInterval(nePollRef.current);
     };
   }, []);
   useEffect(() => {
@@ -822,6 +827,32 @@ export default function App() {
       setUser(null);
       Toast.info('已退出');
     }).catch(() => {});
+  }
+  function openNeLogin() {
+    setNeLoginOpen(true);
+    startNeQr();
+  }
+  function startNeQr() {
+    post<{ token: string; url: string }>('/api/auth/netease/qr/start', {})
+      .then((r) => {
+        setNeState('pending');
+        QRCode.toDataURL(r.url, { width: 220, margin: 1 }).then(setNeQrImg).catch(() => setNeQrImg(''));
+        if (nePollRef.current) window.clearInterval(nePollRef.current);
+        nePollRef.current = window.setInterval(() => {
+          api<{ state: string; hasCookie: boolean }>('/api/auth/netease/qr/check?token=' + encodeURIComponent(r.token))
+            .then((st) => {
+              setNeState(st.state);
+              if (st.state === 'confirmed') {
+                if (nePollRef.current) window.clearInterval(nePollRef.current);
+                Toast.success('网易云登录成功');
+                setNeLoginOpen(false);
+                loadSettings();
+              } else if (st.state === 'expired' && nePollRef.current) window.clearInterval(nePollRef.current);
+            })
+            .catch(() => {});
+        }, 2000);
+      })
+      .catch((e) => Toast.error('获取网易云二维码失败：' + e.message));
   }
 
   const typeOptions = useMemo(
@@ -1592,7 +1623,10 @@ export default function App() {
           </div>
           <div className="field">
             <span>网易云 Cookie</span>
-            <Input value={settings.neteaseCookie} onChange={(v) => setSettings((s) => ({ ...s, neteaseCookie: v }))} placeholder="MUSIC_U=...（提升网易云播放成功率）" />
+            <Input value={settings.neteaseCookie} onChange={(v) => setSettings((s) => ({ ...s, neteaseCookie: v }))} placeholder="MUSIC_U=...（可点右侧「扫码登录」自动获取）" />
+            <Button size="small" style={{ marginLeft: 8 }} onClick={openNeLogin}>
+              扫码登录
+            </Button>
           </div>
           <Button theme="solid" type="primary" onClick={saveSettings}>
             保存
@@ -1646,6 +1680,24 @@ export default function App() {
               ) : null}
             </div>
           ) : null}
+        </div>
+      </Modal>
+
+      <Modal title="网易云扫码登录" visible={neLoginOpen} footer={null} width={360} onCancel={() => setNeLoginOpen(false)}>
+        <div style={{ textAlign: 'center' }}>
+          {neQrImg ? (
+            <img src={neQrImg} style={{ width: 220, height: 220, borderRadius: 12 }} />
+          ) : (
+            <div style={{ padding: 44 }}>加载中…</div>
+          )}
+          <div className="hint" style={{ marginTop: 10 }}>
+            {neState === 'scanned' ? '已扫码，请在手机上确认' : neState === 'expired' ? '二维码已过期，请重新获取' : '请用「网易云音乐」App 扫码登录'}
+          </div>
+          <div style={{ marginTop: 14 }}>
+            <Button size="small" onClick={startNeQr}>
+              重新获取
+            </Button>
+          </div>
         </div>
       </Modal>
 

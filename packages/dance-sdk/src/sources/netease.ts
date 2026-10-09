@@ -144,3 +144,28 @@ export function extractNeId(input: string): { kind: 'playlist' | 'song'; id: str
   if (pl) return { kind: 'playlist', id: pl[1] };
   return null;
 }
+
+/* ---------------------------- 网易云扫码登录 ---------------------------- */
+
+/** 获取登录二维码：返回 unikey（token）与二维码里要编码的 URL */
+export async function qrStart(signal?: AbortSignal): Promise<{ token: string; url: string }> {
+  const j = await getJson('/api/login/qrcode/unikey?type=1', signal);
+  if (!j?.unikey) throw new Error('获取网易云二维码失败');
+  const token = String(j.unikey);
+  return { token, url: 'https://music.163.com/login?codekey=' + encodeURIComponent(token) };
+}
+
+/** 轮询扫码状态；confirmed 时返回登录 Cookie（MUSIC_U） */
+export async function qrCheck(token: string, signal?: AbortSignal): Promise<{ state: 'pending' | 'scanned' | 'confirmed' | 'expired'; cookie?: string }> {
+  const r = await fetch(`${BASE}/api/login/qrcode/client/login?type=1&key=${encodeURIComponent(token)}`, { headers: headers(), signal });
+  const j = (await r.json().catch(() => ({}))) as { code?: number };
+  const code = Number(j?.code);
+  if (code === 803) {
+    const setc = ((r.headers as unknown as { getSetCookie?: () => string[] }).getSetCookie?.() ?? []).map((c) => c.split(';')[0]);
+    const cookie = setc.filter((c) => /MUSIC_U=|__csrf=/.test(c)).join('; ');
+    return { state: 'confirmed', cookie };
+  }
+  if (code === 802) return { state: 'scanned' };
+  if (code === 800) return { state: 'expired' };
+  return { state: 'pending' };
+}

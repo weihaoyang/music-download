@@ -974,6 +974,20 @@ export function createServer(cfg: BackendConfig) {
       const start = await pool.qrLogin().start(type);
       return sendJson(res, 200, { ok: true, ...start });
     }
+    // 网易云扫码登录（拿到 MUSIC_U → 存进设置）
+    if (p === '/api/auth/netease/qr/start' && method === 'POST') {
+      const s = await netease.qrStart();
+      return sendJson(res, 200, { ok: true, ...s });
+    }
+    if (p === '/api/auth/netease/qr/check' && method === 'GET') {
+      const token = url.searchParams.get('token') || '';
+      const r = await netease.qrCheck(token);
+      if (r.state === 'confirmed' && r.cookie) {
+        netease.setNeteaseCookie(r.cookie);
+        await settings.update({ neteaseCookie: r.cookie });
+      }
+      return sendJson(res, 200, { ok: true, state: r.state, hasCookie: netease.hasNeteaseCookie() });
+    }
     if (p === '/api/auth/qr/check' && method === 'GET') {
       const type = url.searchParams.get('type') === 'wx' ? 'wx' : 'qq';
       const token = url.searchParams.get('token') || '';

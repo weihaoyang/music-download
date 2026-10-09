@@ -859,3 +859,17 @@ D:\music-download\
   - 每行新增勾选框（`.song-pick`，曲库页专属）；勾选后出现批量栏「已选 N 首」+「改为舞种」下拉 +「应用舞种」/「移除选中」/「取消选择」。
   - **应用舞种**：对每个 mid 调 `PUT /api/library/song {mid,type}`；**移除选中**：`Modal.confirm` 后逐个 `DELETE /api/library/song?mid=`；完成后刷新类型与当前列表。切换舞种时自动清空选择。
 - **实测**：曲库页渲染勾选框；勾 1 首 → 批量栏「已选 1 首」，点「取消选择」批量栏消失；排序选「BPM ↑」→ 首几行 `89/93/100 BPM` 升序，下拉显示「BPM ↑」；无 console 报错；`smoke-v6` 27/27、`smoke-v7` 14/14。
+
+## 48. 排曲增强：自动裁剪 ≤4 分钟 + 时长分配明细 + 更细规则提示（✅ 已完成并实测）
+
+- **自动裁剪**：`GenerateParams.autoTrim`——生成时把超过 4 分钟的单曲写入 `playMs=240000`（大屏/播放到点自动切歌）；前端新增「自动裁剪 ≤4 分钟 / 保留原长」开关（默认开）。生成结果不再把 `playMs` 清空。
+- **时长分配明细**：`/api/setlist/generate` 新增返回 `allocation`（各舞种 `count`/`ms`）；排曲页在总时长下方显示「时长分配：平四 42 分（5 首）· 伦巴 30 分（3 首）…」。
+- **更细的规则提示**：`checkSetlist(songs, targetMin?)` 在原有「快慢相间 / 集体舞间隔 / 单曲 ≤4 分钟」之上新增：
+  - `DUPLICATE` 同一首重复出现（warn）；
+  - `CONSEC_SAME` 相邻两首同类型（info）；
+  - `TYPE_REPEAT` 3 首内同类型再现（info）；
+  - `ARTIST_REPEAT` 3 首内同歌手（info）；
+  - `NO_OPEN` 未以集体舞开场（info）；
+  - `DURATION` 总时长与目标偏差 > max(2 分, 10%)（info）。
+  - 提示信息都带「第 N 首《歌名》」便于定位。`/api/setlist/generate` 与 `/check` 都会带上目标时长。
+- **实测**：`generate {durationMin:45, autoTrim:true}` → 返回 `allocation`（快三 793s/5 首 …）、**6 首被裁到 240s**、含 `DURATION`；合成排曲 `checkSetlist` 触发 `DUPLICATE/CONSEC_SAME/TYPE_REPEAT/ARTIST_REPEAT/NO_OPEN/LONG/SPEED_RUN/NO_GROUP` 且带歌名；排曲页显示「时长分配：…」与带歌名的提示、自动裁剪开关存在、无 console 报错；`smoke-v6` 27/27、`smoke-v7` 14/14。

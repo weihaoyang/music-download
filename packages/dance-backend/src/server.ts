@@ -11,7 +11,7 @@ import { SessionStore } from './session';
 import { LibraryStore, type LibrarySong } from './library';
 import { ClientPool } from './clients';
 import { TaskStore } from './tasks';
-import { SetlistStore, generateSetlist, checkSetlist, type EventMeta } from './setlist';
+import { SetlistStore, generateSetlist, checkSetlist, effectiveMs, type EventMeta } from './setlist';
 import { SettingsStore } from './settings';
 import { RequestStore } from './requests';
 import { HistoryStore } from './history';
@@ -1167,18 +1167,29 @@ export function createServer(cfg: BackendConfig) {
     /* ------------------------------ 排曲 ------------------------------ */
     if (p === '/api/setlist/generate' && method === 'POST') {
       const body = await readBody(req);
+      const durationMin = Number(body.durationMin ?? 120);
       const songs = generateSetlist(library, {
-        durationMin: Number(body.durationMin ?? 120),
+        durationMin,
         weights: (body.weights as Record<string, number>) || {},
         mode: body.mode === 'sequential' ? 'sequential' : 'weighted',
         fill: body.fill !== false,
         order: Array.isArray(body.order) ? (body.order as string[]).map(String) : undefined,
+        autoTrim: body.autoTrim === true,
       });
-      const totalMs = songs.reduce((s, x) => s + (x.durationMs || 0), 0);
-      const issues = checkSetlist(songs);
+      const totalMs = songs.reduce((s, x) => s + effectiveMs(x), 0);
+      // 各舞种时长分配统计（planned vs actual 之一：实际分配）
+      const alloc = new Map<string, { type: string; count: number; ms: number }>();
+      for (const s of songs) {
+        const a = alloc.get(s.type) ?? { type: s.type, count: 0, ms: 0 };
+        a.count += 1;
+        a.ms += effectiveMs(s);
+        alloc.set(s.type, a);
+      }
+      const allocation = [...alloc.values()].sort((a, b) => b.ms - a.ms);
+      const issues = checkSetlist(songs, durationMin);
       let saved = null;
-      if (body.name) saved = await setlists.save_list(String(body.name), songs, Number(body.durationMin ?? 120));
-      return sendJson(res, 200, { ok: true, totalMs, songs, issues, saved });
+      if (body.name) saved = await setlists.save_list(String(body.name), songs, durationMin);
+      return sendJson(res, 200, { ok: true, totalMs, songs, allocation, issues, saved });
     }
     // 排曲规则检查（对任意曲目列表）
     if (p === '/api/setlist/check' && method === 'POST') {
@@ -1192,7 +1203,7 @@ export function createServer(cfg: BackendConfig) {
         durationMs: Number(s.durationMs ?? 0),
         playMs: s.playMs == null ? null : Number(s.playMs),
       }));
-      return sendJson(res, 200, { ok: true, issues: checkSetlist(list) });
+      return sendJson(res, 200, { ok: true, issues: checkSetlist(list, Number(body.targetMin) || undefined) });
     }
     if (p === '/api/setlist' && method === 'POST') {
       const body = await readBody(req);

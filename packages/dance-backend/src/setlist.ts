@@ -44,6 +44,8 @@ export interface GenerateParams {
   fill?: boolean;
   /** 自定义排曲类型顺序（优先满足）；缺省用 DEFAULT_DANCE_ORDER */
   order?: string[];
+  /** 自动把超过 4 分钟的单曲裁剪到 4 分钟（写入 playMs） */
+  autoTrim?: boolean;
 }
 
 function toSetlistSong(s: LibrarySong): SetlistSong {
@@ -141,7 +143,10 @@ export function generateSetlist(library: LibraryStore, params: GenerateParams): 
       }
     }
   }
-  return out;
+  const res = out;
+  // 自动裁剪：超过 4 分钟的单曲裁到 4 分钟（写入 playMs，播到点自动切歌）
+  if (params.autoTrim) for (const s of res) if (effectiveMs(s) > 240000) s.playMs = 240000;
+  return res;
 }
 
 /* ------------------------- 排曲规则检查（HBDC 排曲原则） ------------------------- */
@@ -156,10 +161,11 @@ export interface SetlistIssue {
 const FAST_TYPES = new Set(['平四', '吉特巴', '并四', '快三']);
 const SLOW_TYPES = new Set(['慢三', '慢四', '中三', '中四', '伦巴']);
 
-/** 依据《HBDC 排曲原则》检查：快慢相间 / 每 3~4 首集体舞 / 单曲 ≤4 分钟 */
-export function checkSetlist(songs: SetlistSong[]): SetlistIssue[] {
+/** 依据《HBDC 排曲原则》检查：快慢相间 / 每 3~4 首集体舞 / 单曲 ≤4 分钟；并给出重复曲目、同类/同歌手过近、开场、目标时长等更细提示 */
+export function checkSetlist(songs: SetlistSong[], targetMin?: number): SetlistIssue[] {
   const issues: SetlistIssue[] = [];
   const speed = (t: string): 'fast' | 'slow' | null => (FAST_TYPES.has(t) ? 'fast' : SLOW_TYPES.has(t) ? 'slow' : null);
+  const label = (i: number): string => `第 ${i + 1} 首《${songs[i]?.name ?? ''}》`;
 
   // 快慢相间：连续 3 首同速
   let run = 1;
@@ -186,8 +192,61 @@ export function checkSetlist(songs: SetlistSong[]): SetlistIssue[] {
   // 单曲时长：尽量 ≤4 分钟
   songs.forEach((s, i) => {
     const ms = effectiveMs(s);
-    if (ms > 240000) issues.push({ level: 'info', code: 'LONG', message: `第 ${i + 1} 首《${s.name}》时长 ${Math.round(ms / 1000)}s（建议 ≤4 分钟）`, index: i });
+    if (ms > 240000) issues.push({ level: 'info', code: 'LONG', message: `${label(i)}时长 ${Math.round(ms / 1000)}s（建议 ≤4 分钟）`, index: i });
   });
+
+  // 重复曲目（同一首出现多次）
+  const seen = new Map<string, number>();
+  songs.forEach((s, i) => {
+    const prev = seen.get(s.mid);
+    if (prev != null) issues.push({ level: 'warn', code: 'DUPLICATE', message: `${label(i)}与第 ${prev + 1} 首重复`, index: i });
+    else seen.set(s.mid, i);
+  });
+
+  // 连续同类型（两首相邻）
+  for (let i = 1; i < songs.length; i++) {
+    if (songs[i].type && songs[i].type === songs[i - 1].type && songs[i].type !== '集体舞') {
+      issues.push({ level: 'info', code: 'CONSEC_SAME', message: `${label(i)}与上一首同为「${songs[i].type}」`, index: i });
+    }
+  }
+
+  // 同类型过于接近（3 首内重复、非相邻）
+  for (let i = 1; i < songs.length; i++) {
+    if (!songs[i].type || songs[i].type === '集体舞') continue;
+    for (let j = Math.max(0, i - 3); j < i - 1; j++) {
+      if (songs[j].type === songs[i].type) {
+        issues.push({ level: 'info', code: 'TYPE_REPEAT', message: `${label(i)}与第 ${j + 1} 首同为「${songs[i].type}」（间隔较近）`, index: i });
+        break;
+      }
+    }
+  }
+
+  // 同歌手过于接近（3 首内）
+  for (let i = 1; i < songs.length; i++) {
+    const mine = new Set(songs[i].artists || []);
+    if (!mine.size) continue;
+    for (let j = Math.max(0, i - 3); j < i; j++) {
+      const shared = (songs[j].artists || []).find((a) => mine.has(a));
+      if (shared) {
+        issues.push({ level: 'info', code: 'ARTIST_REPEAT', message: `${label(i)}与第 ${j + 1} 首同为「${shared}」`, index: i });
+        break;
+      }
+    }
+  }
+
+  // 开场：建议集体舞
+  if (songs.length >= 4 && songs[0].type && songs[0].type !== '集体舞') {
+    issues.push({ level: 'info', code: 'NO_OPEN', message: '未以集体舞开场（规则建议集体舞开场）', index: 0 });
+  }
+
+  // 目标时长（可选）：偏差较大时提示
+  if (targetMin && targetMin > 0) {
+    const totalMin = songs.reduce((a, s) => a + effectiveMs(s), 0) / 60000;
+    const diff = Math.abs(totalMin - targetMin);
+    if (diff > Math.max(2, targetMin * 0.1)) {
+      issues.push({ level: 'info', code: 'DURATION', message: `总时长 ${totalMin.toFixed(0)} 分，与目标 ${targetMin} 分相差 ${diff.toFixed(0)} 分` });
+    }
+  }
 
   return issues;
 }

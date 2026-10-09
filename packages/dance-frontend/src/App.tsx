@@ -186,6 +186,8 @@ export default function App() {
   const [weights, setWeights] = useState<Record<string, number>>({});
   const [orderText, setOrderText] = useState(DEFAULT_ORDER.join(' '));
   const [mode, setMode] = useState<'weighted' | 'sequential'>('weighted');
+  const [autoTrim, setAutoTrim] = useState(true);
+  const [alloc, setAlloc] = useState<Array<{ type: string; count: number; ms: number }>>([]);
   const [setlistName, setSetlistName] = useState('');
   const [gen, setGen] = useState<SetSong[]>([]);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -835,11 +837,12 @@ export default function App() {
       return;
     }
     setGenerating(true);
-    post<{ songs: LibrarySong[]; totalMs: number; issues?: GenIssue[] }>('/api/setlist/generate', { durationMin, weights, mode, fill: true, order: orderArr })
+    post<{ songs: LibrarySong[]; totalMs: number; allocation?: Array<{ type: string; count: number; ms: number }>; issues?: GenIssue[] }>('/api/setlist/generate', { durationMin, weights, mode, fill: true, order: orderArr, autoTrim })
       .then((r) => {
-        const list = (r.songs || []).map((s) => ({ ...s, playMs: null }));
+        const list = (r.songs || []).map((s) => ({ ...s, playMs: s.playMs ?? null }));
         setGen(list);
         setGenIssues(r.issues || []);
+        setAlloc(r.allocation || []);
         Toast.success(`生成 ${list.length} 首，共 ${fmt(totalOf(list))}`);
       })
       .catch((e) => Toast.error('生成失败：' + e.message))
@@ -847,7 +850,7 @@ export default function App() {
   }
   function checkRules() {
     if (!gen.length) return Toast.warning('还没有排曲内容');
-    post<{ issues: GenIssue[] }>('/api/setlist/check', { songs: gen })
+    post<{ issues: GenIssue[] }>('/api/setlist/check', { songs: gen, targetMin: durationMin })
       .then((r) => {
         setGenIssues(r.issues || []);
         Toast.info(r.issues && r.issues.length ? `规则检查：${r.issues.length} 条提示` : '规则检查通过 ✓');
@@ -1403,6 +1406,10 @@ export default function App() {
                   <Radio value="weighted">随机打乱</Radio>
                   <Radio value="sequential">严格顺序</Radio>
                 </RadioGroup>
+                <RadioGroup value={autoTrim ? 1 : 0} onChange={(e) => setAutoTrim(Number(e.target.value) === 1)}>
+                  <Radio value={1}>自动裁剪 ≤4 分钟</Radio>
+                  <Radio value={0}>保留原长</Radio>
+                </RadioGroup>
               </div>
               <div className="weights">
                 {types.map((t) => (
@@ -1450,6 +1457,11 @@ export default function App() {
                   <div className="hint" style={{ marginBottom: 10 }}>
                     共 {gen.length} 首 · 总时长 {fmt(totalOf(gen))}（拖拽 ⠿ 调顺序，「秒」列裁剪单曲时长）
                   </div>
+                  {alloc.length ? (
+                    <div className="hint" style={{ marginBottom: 10 }}>
+                      时长分配：{alloc.map((a) => `${a.type} ${fmt(a.ms)}（${a.count} 首）`).join('　·　')}
+                    </div>
+                  ) : null}
                   {genIssues.length ? (
                     <div className="issues">
                       {genIssues.map((it, i) => (

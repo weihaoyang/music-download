@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Howl } from 'howler';
 import anime from 'animejs';
 import { getQueue, type QueueItem } from './api';
+import QRCode from 'qrcode';
 
 const FADE_OUT = 700;
 const FADE_IN = 900;
@@ -45,6 +46,8 @@ export default function WallApp() {
   const soundRef = useRef<Howl | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const busyRef = useRef(false);
+  const [finished, setFinished] = useState(false);
+  const [qr, setQr] = useState('');
 
   const cur = items[idx];
   const limitSec = cur && cur.playMs && cur.playMs > 0 ? cur.playMs / 1000 : 0;
@@ -55,6 +58,11 @@ export default function WallApp() {
     tick();
     const t = window.setInterval(tick, 1000);
     return () => window.clearInterval(t);
+  }, []);
+
+  // 点歌二维码（离线生成）
+  useEffect(() => {
+    QRCode.toDataURL(window.location.origin + '/request', { width: 240, margin: 1 }).then(setQr).catch(() => {});
   }, []);
 
   // 播放当前曲目（淡入）+ 视觉过渡
@@ -70,7 +78,10 @@ export default function WallApp() {
       onplay: () => setPlaying(true),
       onpause: () => setPlaying(false),
       onload: () => setDur(s.duration() || (cur.durationMs ? cur.durationMs / 1000 : 0)),
-      onend: () => setIdx((i) => (i + 1 < items.length ? i + 1 : i)),
+      onend: () => {
+        if (idx + 1 < items.length) setIdx(idx + 1);
+        else setFinished(true);
+      },
     });
     soundRef.current = s;
     s.play();
@@ -206,6 +217,21 @@ export default function WallApp() {
     );
   }
 
+  if (finished) {
+    return (
+      <div className="wall wall-end">
+        <div className="wall-end-inner">
+          <div className="wall-end-brand">舞曲排曲台</div>
+          <div className="wall-end-title">本场到此</div>
+          <div className="wall-end-sub">谢谢大家 · 欢迎下次再来</div>
+          <button className="wall-exit" onClick={exitWall}>
+            ← 返回控制台
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="wall">
       {[0, 1].map((i) => (
@@ -243,6 +269,7 @@ export default function WallApp() {
           </div>
           <div className="wall-times">
             <span>{mmss(pos)}</span>
+            <span className={'wall-remain' + (dur > 0 && dur - pos <= 15 ? ' soon' : '')}>{dur > 0 ? '还剩 ' + mmss(Math.max(0, dur - pos)) : '--:--'}</span>
             <span>{dur > 0 ? mmss(dur) : '--:--'}</span>
           </div>
 
@@ -269,6 +296,10 @@ export default function WallApp() {
             ))}
             {!upcoming.length ? <li className="n-empty">已是最后一首</li> : null}
           </ol>
+          <div className="wall-qr">
+            {qr ? <img src={qr} alt="点歌" /> : null}
+            <span>扫码点歌</span>
+          </div>
         </aside>
       </main>
 

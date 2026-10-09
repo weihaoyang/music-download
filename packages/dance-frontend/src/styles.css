@@ -882,6 +882,63 @@ body {
   opacity: 1;
   background: #fff;
 }
+.wall-remain {
+  opacity: 0.85;
+}
+.wall-remain.soon {
+  color: #b23b2e;
+  font-weight: 600;
+}
+.wall-qr {
+  margin-top: 2vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.wall-qr img {
+  width: 9vw;
+  max-width: 150px;
+  min-width: 96px;
+  background: #fff;
+  padding: 6px;
+  border-radius: 10px;
+}
+.wall-qr span {
+  font-size: 0.9vw;
+  letter-spacing: 0.2em;
+  opacity: 0.75;
+}
+.wall-end {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.wall-end-inner {
+  position: relative;
+}
+.wall-end-brand {
+  font-size: 1.4vw;
+  letter-spacing: 0.5em;
+  color: var(--gold);
+  margin-bottom: 3vh;
+}
+.wall-end-title {
+  font-family: var(--serif);
+  font-size: 8vw;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+.wall-end-sub {
+  margin-top: 2.4vh;
+  font-size: 1.6vw;
+  opacity: 0.7;
+  letter-spacing: 0.3em;
+}
+.wall-end .wall-exit {
+  margin-top: 6vh;
+}
 .wall-main {
   position: relative;
   flex: 1;

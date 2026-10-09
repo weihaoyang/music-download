@@ -22,10 +22,22 @@ const { Title, Text } = Typography;
 const { TabPane } = Tabs;
 
 type SetSong = LibrarySong & { playMs?: number | null };
+type GenIssue = { level: 'warn' | 'info'; code: string; message: string; index?: number };
 const DEFAULT_ORDER = ['集体舞', '慢四', '吉特巴', '慢三', '平四', '并四', '伦巴', '快三'];
 
 function fmt(ms: number): string {
   return `${Math.round((ms || 0) / 60000)} 分`;
+}
+function fmtBytes(n: number): string {
+  if (!n) return '0';
+  const u = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let i = 0;
+  let v = n;
+  while (v >= 1024 && i < u.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return v.toFixed(i === 0 ? 0 : 1) + ' ' + u[i];
 }
 function mmss(ms: number): string {
   const s = Math.round((ms || 0) / 1000);
@@ -139,6 +151,8 @@ export default function App() {
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [savedLists, setSavedLists] = useState<Array<{ id: string; name: string; count: number; totalMs: number }>>([]);
   const [generating, setGenerating] = useState(false);
+  const [genIssues, setGenIssues] = useState<GenIssue[]>([]);
+  const [status, setStatus] = useState<any>(null);
 
   const [user, setUser] = useState<{ uin: string; nickname?: string | null; vip?: boolean } | null>(null);
   const [loginOpen, setLoginOpen] = useState(false);
@@ -196,6 +210,9 @@ export default function App() {
   }
   function loadSetlists() {
     api<{ data: typeof savedLists }>('/api/setlists').then((r) => setSavedLists(r.data || [])).catch(() => {});
+  }
+  function loadStatus() {
+    api('/api/status').then((r) => setStatus(r as unknown)).catch(() => {});
   }
   function loadSettings() {
     setAdminToken(adminTokenState);
@@ -299,6 +316,9 @@ export default function App() {
   useEffect(() => {
     if (activeType) loadSongs(activeType);
   }, [activeType]);
+  useEffect(() => {
+    if (activeTab === 'status') loadStatus();
+  }, [activeTab]);
   useEffect(() => {
     if (!task || task.status === 'done') return;
     const timer = window.setInterval(() => {
@@ -550,14 +570,24 @@ export default function App() {
       return;
     }
     setGenerating(true);
-    post<{ songs: LibrarySong[]; totalMs: number }>('/api/setlist/generate', { durationMin, weights, mode, fill: true, order: orderArr })
+    post<{ songs: LibrarySong[]; totalMs: number; issues?: GenIssue[] }>('/api/setlist/generate', { durationMin, weights, mode, fill: true, order: orderArr })
       .then((r) => {
         const list = (r.songs || []).map((s) => ({ ...s, playMs: null }));
         setGen(list);
+        setGenIssues(r.issues || []);
         Toast.success(`生成 ${list.length} 首，共 ${fmt(totalOf(list))}`);
       })
       .catch((e) => Toast.error('生成失败：' + e.message))
       .finally(() => setGenerating(false));
+  }
+  function checkRules() {
+    if (!gen.length) return Toast.warning('还没有排曲内容');
+    post<{ issues: GenIssue[] }>('/api/setlist/check', { songs: gen })
+      .then((r) => {
+        setGenIssues(r.issues || []);
+        Toast.info(r.issues && r.issues.length ? `规则检查：${r.issues.length} 条提示` : '规则检查通过 ✓');
+      })
+      .catch((e) => Toast.error('检查失败：' + e.message));
   }
   function moveGen(from: number, to: number) {
     setGen((g) => {
@@ -1043,6 +1073,9 @@ export default function App() {
                   <Button theme="solid" type="tertiary" onClick={() => openWall(gen)} disabled={!gen.length}>
                     大屏播放
                   </Button>
+                  <Button onClick={checkRules} disabled={!gen.length}>
+                    规则检查
+                  </Button>
                 </div>
               </div>
 
@@ -1051,6 +1084,16 @@ export default function App() {
                   <div className="hint" style={{ marginBottom: 10 }}>
                     共 {gen.length} 首 · 总时长 {fmt(totalOf(gen))}（拖拽 ⠿ 调顺序，「秒」列裁剪单曲时长）
                   </div>
+                  {genIssues.length ? (
+                    <div className="issues">
+                      {genIssues.map((it, i) => (
+                        <div key={i} className={'issue ' + (it.level === 'warn' ? 'warn' : 'info')}>
+                          {it.level === 'warn' ? '⚠ ' : 'ℹ '}
+                          {it.message}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                   <div className="setlist-editor">
                     {gen.map((s, i) => (
                       <div
@@ -1164,6 +1207,70 @@ export default function App() {
                   </div>
                   还没有保存的排曲
                 </div>
+              )}
+            </div>
+          </TabPane>
+
+          <TabPane tab="状态" itemKey="status">
+            <div className="panel">
+              <div className="panel-head">
+                <span className="panel-title">系统状态</span>
+                <div className="panel-actions">
+                  <Button onClick={loadStatus}>刷新</Button>
+                </div>
+              </div>
+              {status ? (
+                <div className="status-grid">
+                  <div className="status-card">
+                    <div className="sc-title">缓存</div>
+                    <div className="sc-body">
+                      {fmtBytes(status.cache.bytes)} / {status.cache.limit > 0 ? fmtBytes(status.cache.limit) : '不限'}（{status.cache.files} 个文件）
+                    </div>
+                  </div>
+                  <div className="status-card">
+                    <div className="sc-title">曲库</div>
+                    <div className="sc-body">
+                      共 {status.library.total} 首 · 我喜欢 {status.library.liked}
+                      <br />
+                      {Object.entries(status.library.byType as Record<string, number>)
+                        .filter(([, c]) => c > 0)
+                        .map(([t, c]) => `${t} ${c}`)
+                        .join(' · ')}
+                    </div>
+                  </div>
+                  <div className="status-card">
+                    <div className="sc-title">来源</div>
+                    <div className="sc-body">
+                      {(status.sources as Array<{ label: string; auth: boolean }>).map((s) => s.label + (s.auth ? ' ✓' : ' ✗')).join(' · ')}
+                      <br />
+                      按来源：{Object.entries(status.library.bySource as Record<string, number>).map(([k, c]) => `${k} ${c}`).join(' · ')}
+                    </div>
+                  </div>
+                  <div className="status-card">
+                    <div className="sc-title">环境</div>
+                    <div className="sc-body">
+                      ffmpeg {status.deps.ffmpeg ? '✓' : '✗'} · 登录 {status.sessions} · 已存排曲 {status.setlists}
+                    </div>
+                  </div>
+                  <div className="status-card">
+                    <div className="sc-title">最近任务</div>
+                    <div className="sc-body">
+                      {(status.tasks as Array<{ kind: TaskItem['kind']; done: number; total: number; failed: number }>)
+                        .map((t) => `${kindLabel(t.kind)} ${t.done}/${t.total}${t.failed ? '（失败 ' + t.failed + '）' : ''}`)
+                        .join('　') || '无'}
+                    </div>
+                  </div>
+                  <div className="status-card">
+                    <div className="sc-title">运行</div>
+                    <div className="sc-body">
+                      {Math.round(status.uptimeMs / 60000)} 分钟
+                      <br />
+                      {status.mediaDir}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="empty">加载中…</div>
               )}
             </div>
           </TabPane>

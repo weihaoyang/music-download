@@ -2,6 +2,7 @@ import http from 'http';
 import fsSync from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import { spawnSync } from 'child_process';
 import { QQMusicError, isQQMusicError, createQQMusicClient } from '@hdbc/qqmusic-sdk';
 import type { Quality, Song } from '@hdbc/qqmusic-sdk';
 import type { IncomingMessage, ServerResponse } from 'http';
@@ -10,7 +11,7 @@ import { SessionStore } from './session';
 import { LibraryStore } from './library';
 import { ClientPool } from './clients';
 import { TaskStore } from './tasks';
-import { SetlistStore, generateSetlist, type EventMeta } from './setlist';
+import { SetlistStore, generateSetlist, checkSetlist, type EventMeta } from './setlist';
 import { SettingsStore } from './settings';
 import { analyze, MediaCache, createSourceRegistry, scanDanceDir, coreName, localMid, netease, type TrackMeta } from '@hdbc/dance-sdk';
 import { sendJson, readBody, parseCookies, setCookie, clearCookie } from './http';
@@ -91,6 +92,18 @@ export function createServer(cfg: BackendConfig) {
       autoClassify: s.autoClassify ?? cfg.autoClassify,
       neteaseCookie: s.neteaseCookie ?? cfg.neteaseCookie,
     };
+  }
+
+  let ffmpegOk: boolean | null = null;
+  function ffmpegAvailable(): boolean {
+    if (ffmpegOk === null) {
+      try {
+        ffmpegOk = spawnSync(process.env.MF_FFMPEG || 'ffmpeg', ['-version'], { windowsHide: true }).status === 0;
+      } catch {
+        ffmpegOk = false;
+      }
+    }
+    return ffmpegOk;
   }
 
   let media = new MediaCache(cfg.mediaDir, cfg.mediaQuality, cfg.downloadConcurrency, cfg.logger);
@@ -345,6 +358,33 @@ export function createServer(cfg: BackendConfig) {
         mediaDir: e.mediaDir,
         mediaQuality: e.mediaQuality,
         autoDownload: e.autoDownload,
+      });
+    }
+    // 系统状态：缓存 / 曲库分布 / 来源登录态 / 任务 / 依赖
+    if (p === '/api/status' && method === 'GET') {
+      const e = eff();
+      const { bytes, files } = await media.stats();
+      const all = library.allSongs();
+      const bySource: Record<string, number> = {};
+      for (const s of all) {
+        const k = s.source || 'qqmusic';
+        bySource[k] = (bySource[k] || 0) + 1;
+      }
+      const byType: Record<string, number> = {};
+      for (const t of library.types()) byType[t.type] = t.count;
+      return sendJson(res, 200, {
+        ok: true,
+        uptimeMs: Math.round(process.uptime() * 1000),
+        now: Date.now(),
+        mediaDir: e.mediaDir,
+        mediaQuality: e.mediaQuality,
+        cache: { bytes, files, limit: e.cacheLimitBytes },
+        library: { total: all.length, liked: library.likedSongs().length, byType, bySource },
+        sources: [...sources.values()].map((d) => ({ id: d.id, label: d.label, kind: d.kind, auth: d.authed(), search: !!d.search })),
+        sessions: sessions.list().length,
+        setlists: setlists.list().length,
+        tasks: tasks.list().slice(0, 5).map((t) => ({ id: t.id, kind: t.kind, status: t.status, total: t.total, done: t.done, failed: t.failed })),
+        deps: { ffmpeg: ffmpegAvailable() },
       });
     }
 
@@ -925,9 +965,24 @@ export function createServer(cfg: BackendConfig) {
         order: Array.isArray(body.order) ? (body.order as string[]).map(String) : undefined,
       });
       const totalMs = songs.reduce((s, x) => s + (x.durationMs || 0), 0);
+      const issues = checkSetlist(songs);
       let saved = null;
       if (body.name) saved = await setlists.save_list(String(body.name), songs, Number(body.durationMin ?? 120));
-      return sendJson(res, 200, { ok: true, totalMs, songs, saved });
+      return sendJson(res, 200, { ok: true, totalMs, songs, issues, saved });
+    }
+    // 排曲规则检查（对任意曲目列表）
+    if (p === '/api/setlist/check' && method === 'POST') {
+      const body = await readBody(req);
+      const songs = Array.isArray(body.songs) ? (body.songs as Array<Record<string, unknown>>) : [];
+      const list = songs.map((s) => ({
+        mid: String(s.mid ?? ''),
+        name: String(s.name ?? ''),
+        artists: Array.isArray(s.artists) ? (s.artists as unknown[]).map(String) : [],
+        type: String(s.type ?? ''),
+        durationMs: Number(s.durationMs ?? 0),
+        playMs: s.playMs == null ? null : Number(s.playMs),
+      }));
+      return sendJson(res, 200, { ok: true, issues: checkSetlist(list) });
     }
     if (p === '/api/setlist' && method === 'POST') {
       const body = await readBody(req);

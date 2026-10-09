@@ -324,6 +324,49 @@ body {
   font-size: 13px;
   resize: vertical;
 }
+.issues {
+  margin: 0 0 10px;
+}
+.issue {
+  font-size: 12.5px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  margin-bottom: 4px;
+}
+.issue.warn {
+  color: #8a5a12;
+  background: rgba(197, 160, 89, 0.14);
+  border: 1px solid rgba(197, 160, 89, 0.35);
+}
+.issue.info {
+  color: var(--muted);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+.status-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-sm);
+}
+.sc-title {
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.sc-body {
+  font-size: 13.5px;
+  color: var(--ink);
+  line-height: 1.7;
+  word-break: break-all;
+}
 .divider {
   height: 1px;
   background: var(--line);

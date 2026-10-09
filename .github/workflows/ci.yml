@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: QQ 音乐 SDK（构建 + 单测）
+        working-directory: packages/qqmusic-sdk
+        run: |
+          npm install
+          npm run build
+          npm test
+
+      - name: 舞曲核心 SDK（构建）
+        working-directory: packages/dance-sdk
+        run: |
+          npm install
+          npm run build
+
+      - name: 后端（构建）
+        working-directory: packages/dance-backend
+        run: |
+          npm install
+          npm run build
+
+      - name: 前端（构建）
+        working-directory: packages/dance-frontend
+        run: |
+          npm install
+          npm run build

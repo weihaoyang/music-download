@@ -144,6 +144,54 @@ export function generateSetlist(library: LibraryStore, params: GenerateParams): 
   return out;
 }
 
+/* ------------------------- 排曲规则检查（HBDC 排曲原则） ------------------------- */
+
+export interface SetlistIssue {
+  level: 'warn' | 'info';
+  code: string;
+  message: string;
+  index?: number;
+}
+
+const FAST_TYPES = new Set(['平四', '吉特巴', '并四', '快三']);
+const SLOW_TYPES = new Set(['慢三', '慢四', '中三', '中四', '伦巴']);
+
+/** 依据《HBDC 排曲原则》检查：快慢相间 / 每 3~4 首集体舞 / 单曲 ≤4 分钟 */
+export function checkSetlist(songs: SetlistSong[]): SetlistIssue[] {
+  const issues: SetlistIssue[] = [];
+  const speed = (t: string): 'fast' | 'slow' | null => (FAST_TYPES.has(t) ? 'fast' : SLOW_TYPES.has(t) ? 'slow' : null);
+
+  // 快慢相间：连续 3 首同速
+  let run = 1;
+  for (let i = 1; i < songs.length; i++) {
+    const a = speed(songs[i - 1].type);
+    const b = speed(songs[i].type);
+    if (a && b && a === b) run++;
+    else run = 1;
+    if (run >= 3) issues.push({ level: 'warn', code: 'SPEED_RUN', message: `第 ${i - 1}~${i + 1} 首连续 ${run} 首同速（快慢未相间）`, index: i });
+  }
+
+  // 集体舞间隔：一般每 3~4 首一首
+  const groups = songs.map((s, i) => (s.type === '集体舞' ? i : -1)).filter((i) => i >= 0);
+  if (!groups.length && songs.length >= 6) {
+    issues.push({ level: 'warn', code: 'NO_GROUP', message: '整场没有集体舞（建议每 3~4 首安排一首集体舞）' });
+  } else {
+    let prev = -1;
+    for (const i of groups) {
+      if (prev >= 0 && i - prev > 5) issues.push({ level: 'warn', code: 'GROUP_GAP', message: `第 ${prev + 1} 首到第 ${i + 1} 首之间隔了 ${i - prev - 1} 首无集体舞`, index: i });
+      prev = i;
+    }
+  }
+
+  // 单曲时长：尽量 ≤4 分钟
+  songs.forEach((s, i) => {
+    const ms = effectiveMs(s);
+    if (ms > 240000) issues.push({ level: 'info', code: 'LONG', message: `第 ${i + 1} 首《${s.name}》时长 ${Math.round(ms / 1000)}s（建议 ≤4 分钟）`, index: i });
+  });
+
+  return issues;
+}
+
 /** 排曲结果存储（可保存/读取） */
 export class SetlistStore {
   private data: Record<string, Setlist> = {};

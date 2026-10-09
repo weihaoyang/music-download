@@ -24,9 +24,26 @@ export interface RequestLimits {
   perRequester: number;
 }
 
-/** 点歌队列（内存 + data/requests.json） */
+/** 点歌热度累计（跨场保留，用于「热门点歌」） */
+export interface RequestTally {
+  key: string;
+  name: string;
+  artists: string[];
+  type?: string | null;
+  mid?: string | null;
+  count: number;
+  lastAt: number;
+}
+
+interface RequestDoc {
+  items: SongRequest[];
+  tally: Record<string, RequestTally>;
+}
+
+/** 点歌队列（内存 + data/requests.json）；热度累计跨场保留 */
 export class RequestStore {
   private data: SongRequest[] = [];
+  private tally: Record<string, RequestTally> = {};
 
   constructor(
     private readonly file: string,
@@ -34,11 +51,45 @@ export class RequestStore {
   ) {}
 
   async load(): Promise<void> {
-    this.data = await readJson<SongRequest[]>(this.file, []);
+    const raw = await readJson<SongRequest[] | RequestDoc>(this.file, []);
+    if (Array.isArray(raw)) {
+      this.data = raw;
+      this.tally = {};
+    } else {
+      this.data = raw.items ?? [];
+      this.tally = raw.tally ?? {};
+    }
   }
 
   private save(): Promise<void> {
-    return writeJson(this.file, this.data);
+    return writeJson(this.file, { items: this.data, tally: this.tally } as RequestDoc);
+  }
+
+  private static keyOf(mid?: string | null, name?: string, artists?: string[]): string {
+    return mid ? 'm:' + mid : 'n:' + (name || '') + '|' + (artists || []).join(',');
+  }
+
+  /** 某首歌的历史点歌热度 */
+  tallyFor(mid?: string | null, name?: string, artists?: string[]): RequestTally | null {
+    return this.tally[RequestStore.keyOf(mid, name, artists)] ?? null;
+  }
+
+  /** 热门点歌 Top N（按累计次数，跨场保留） */
+  popular(limit = 10): RequestTally[] {
+    return Object.values(this.tally)
+      .sort((a, b) => b.count - a.count || b.lastAt - a.lastAt)
+      .slice(0, Math.max(0, limit));
+  }
+
+  /** 是否已在当前队列（待处理/已采纳），用于防重复点歌 */
+  hasActive(mid?: string | null, name?: string, artists?: string[]): boolean {
+    const who = (name || '').trim();
+    const art = (artists || []).join(',');
+    return this.data.some((r) => {
+      if (r.status !== 'pending' && r.status !== 'accepted') return false;
+      if (mid && r.mid) return r.mid === mid;
+      return (r.name || '').trim() === who && (r.artists || []).join(',') === art;
+    });
   }
 
   list(): SongRequest[] {
@@ -67,6 +118,15 @@ export class RequestStore {
   async add(input: Omit<SongRequest, 'id' | 'status' | 'createdAt'>): Promise<SongRequest> {
     const row: SongRequest = { id: randomUUID(), status: 'pending', createdAt: Date.now(), ...input };
     this.data.push(row);
+    // 热度累计（跨场保留）
+    const key = RequestStore.keyOf(input.mid, input.name, input.artists);
+    const t = this.tally[key] ?? (this.tally[key] = { key, name: input.name, artists: input.artists, type: input.type ?? null, mid: input.mid ?? null, count: 0, lastAt: 0 });
+    t.count += 1;
+    t.lastAt = row.createdAt;
+    t.name = input.name;
+    t.artists = input.artists;
+    if (input.type) t.type = input.type;
+    if (input.mid) t.mid = input.mid;
     await this.save();
     return row;
   }

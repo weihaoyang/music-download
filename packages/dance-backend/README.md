@@ -126,6 +126,7 @@ const poll = setInterval(async () => {
 - `data/tracks.sqlite`：默认曲库（Node 内置 `node:sqlite`，原子事务写；首次启动自动从旧 `library.json` / `tracks.json` 迁移）。若运行环境无 `node:sqlite`（Node < 22.5）则回退 `data/tracks.json`（schema v2：`{schemaVersion:2, collections}`；每首含 `provenance`/`assets`）。
 - `data/media/`：**本地音频缓存**（`<songmid>.mp3` 等）
 - `data/history.json`：播放历史（新在前，最多 500 条；`GET /api/history`、`DELETE /api/history`）。曲目播放次数记在 `LibrarySong.playCount`。
+- `data/requests.json`：点歌队列 + 跨场热度 `{ items:[], tally:{} }`（`GET/POST /api/requests`、`POST /api/requests/reset` 只清队列、保留热度）。
 - `data/sessions.json`：用户登录态（含 cookie，注意权限，**勿入库/勿外泄**）
 
 ---

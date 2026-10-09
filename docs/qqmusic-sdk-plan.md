@@ -774,3 +774,10 @@ D:\music-download\
 - **播放历史**：新增 `HistoryStore`（`data/history.json`，新在前，最多 500 条）。`/api/song/stream` 命中曲目即记录一次 `{mid,name,artists,type,coverUrl,at}`（去抖后）。接口：`GET /api/history?limit=`（公开）、`DELETE /api/history`（admin）。
 - **前端**：曲库行新增「已播 N」标签；「状态」Tab 新增「最近播放」列表（舞种 / 歌名 / 歌手 / 时间 + 刷新 / 清空）。
 - **实测**：对已缓存曲连续两次取流 → 历史仅 1 条、`playCount=1`（去抖生效）；重启后历史与 `playCount` 均持久（SQLite）；editor 清空历史 403、admin 可清；`smoke-v6` **27/27**、`smoke-v7` **14/14**；状态页渲染「最近播放（N）」，无 console 报错。
+
+## 38. 点歌防重复 + 热门点歌（✅ 已完成并实测）
+
+- **防重复**：`RequestStore.hasActive(mid,name,artists)` —— 同一首已在队列（pending/accepted）时 `POST /api/requests` 返回 `409 DUPLICATE`「这首歌已在点歌队列中」；`/request` 页直接提示。
+- **本场已播提示**：命中曲目本场（最近 6 小时）已播过 → 仍收下，但返回 `warnings: ['这首歌本场可能已播放过']`，`/request` 页以 warning 提示（防止重复点同一首）。
+- **热门点歌（跨场累计）**：`requests.json` 升级为 `{ items, tally }`（旧数组自动兼容）；每次点歌累计 tally（按 mid，无 mid 则按 歌名+歌手），`reset()`（新一场）**只清队列、保留热度**。`GET /api/requests` 返回 `popular`（Top 10）；控制台「点歌」Tab 新增「热门点歌 Top（跨场累计）」列表。
+- **实测**：首点 200（count=1）→ 同曲再点 409 DUPLICATE；`popular` 正确；`reset` 后 items=0、popular 保留；对已播曲点歌 → `warnings` 命中；`smoke-v6` 27/27、`smoke-v7` 14/14；控制台「点歌」Tab 与 `/request` 页均正常渲染、无 console 报错。

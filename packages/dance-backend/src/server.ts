@@ -402,24 +402,37 @@ export function createServer(cfg: BackendConfig) {
 
     /* --------------------- 点歌（每场 ≤4、每人 ≤1，可在 config 调整） --------------------- */
     if (p === '/api/requests' && method === 'GET') {
-      return sendJson(res, 200, { ok: true, data: requests.list(), stats: requests.stats() });
+      return sendJson(res, 200, { ok: true, data: requests.list(), stats: requests.stats(), popular: requests.popular(10) });
     }
     if (p === '/api/requests' && method === 'POST') {
       const body = await readBody(req);
       const name = String(body.name || '').trim();
       if (!name) return sendJson(res, 400, { ok: false, error: 'name required' });
+      const artists = Array.isArray(body.artists) ? (body.artists as unknown[]).map(String) : [];
+      const mid = body.mid ? String(body.mid) : null;
+      // 防重复：同一首已在队列里就不再收
+      if (requests.hasActive(mid, name, artists)) {
+        return sendJson(res, 409, { ok: false, error: 'DUPLICATE', message: '这首歌已在点歌队列中' });
+      }
       const check = requests.canAdd(body.requester ? String(body.requester) : undefined);
       if (!check.ok) return sendJson(res, 409, { ok: false, error: 'LIMIT', message: check.reason });
+      // 热度/去重提示：本场（最近 6 小时）是否已播过
+      const since = Date.now() - 6 * 3600 * 1000;
+      const playedRecently = history
+        .list(500)
+        .some((e) => e.at >= since && ((mid && e.mid === mid) || (!mid && e.name === name && (e.artists || []).join(',') === artists.join(','))));
+      const warnings = playedRecently ? ['这首歌本场可能已播放过'] : [];
       const row = await requests.add({
         name,
-        artists: Array.isArray(body.artists) ? (body.artists as unknown[]).map(String) : [],
-        mid: body.mid ? String(body.mid) : null,
+        artists,
+        mid,
         source: body.source ? String(body.source) : null,
         type: body.type ? String(body.type) : null,
         note: body.note ? String(body.note) : null,
         requester: body.requester ? String(body.requester) : null,
       });
-      return sendJson(res, 200, { ok: true, data: row, stats: requests.stats() });
+      const tally = requests.tallyFor(mid, name, artists);
+      return sendJson(res, 200, { ok: true, data: row, stats: requests.stats(), warnings, count: tally?.count ?? 1, popular: requests.popular(10) });
     }
     if (p === '/api/requests/reset' && method === 'POST') {
       if (!isAdmin) return sendJson(res, 403, { ok: false, error: 'forbidden' });

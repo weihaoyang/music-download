@@ -54,14 +54,16 @@ export default function RequestApp() {
     } catch {
       /* ignore */
     }
-    post('/api/requests', {
+    post<{ warnings?: string[] }>('/api/requests', {
       name: name.trim(),
       artists: artists.split(/[/、,，]/).map((s) => s.trim()).filter(Boolean),
       note: note.trim(),
       requester: requester.trim(),
     })
-      .then(() => {
-        Toast.success('已点歌 ✓');
+      .then((r) => {
+        const w = r.warnings || [];
+        if (w.length) Toast.warning('已点歌 ✓ ' + w.join('；'));
+        else Toast.success('已点歌 ✓');
         setName('');
         setArtists('');
         setNote('');

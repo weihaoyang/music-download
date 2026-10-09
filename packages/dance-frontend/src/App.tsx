@@ -167,6 +167,7 @@ export default function App() {
   const [clipForm, setClipForm] = useState<{ mid: string; name: string; startS: number; endS: number }>({ mid: '', name: '', startS: 0, endS: 0 });
   const [reqs, setReqs] = useState<Array<{ id: string; name: string; artists: string[]; requester?: string | null; note?: string | null; status: string }>>([]);
   const [reqStats, setReqStats] = useState<{ active: number; totalLimit: number; perRequesterLimit: number } | null>(null);
+  const [reqPopular, setReqPopular] = useState<Array<{ name: string; artists: string[]; count: number; type?: string | null }>>([]);
   const [reqQr, setReqQr] = useState('');
 
   const [user, setUser] = useState<{ uin: string; nickname?: string | null; vip?: boolean } | null>(null);
@@ -248,10 +249,11 @@ export default function App() {
       .catch((e) => Toast.error('清空失败：' + e.message));
   }
   function loadRequests() {
-    api<{ data: typeof reqs; stats: typeof reqStats }>('/api/requests')
+    api<{ data: typeof reqs; stats: typeof reqStats; popular: typeof reqPopular }>('/api/requests')
       .then((r) => {
         setReqs(r.data || []);
         setReqStats(r.stats);
+        setReqPopular(r.popular || []);
       })
       .catch(() => {});
     if (!reqQr) QRCode.toDataURL(window.location.origin + '/request', { width: 200, margin: 1 }).then(setReqQr).catch(() => {});
@@ -1436,6 +1438,19 @@ export default function App() {
                   <div className="hint">{window.location.origin}/request</div>
                 </div>
               </div>
+              {reqPopular.length ? (
+                <div className="req-popular">
+                  <div className="req-pop-title">热门点歌 Top（跨场累计）</div>
+                  {reqPopular.map((p, i) => (
+                    <div className="req-pop-row" key={p.name + '-' + i}>
+                      <span className="req-pop-rank">{i + 1}</span>
+                      <span className="req-name">{p.name}</span>
+                      <span className="req-sub">{(p.artists || []).join('/')}</span>
+                      <span className="chip chip-gold">{p.count} 次</span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
           </TabPane>
 

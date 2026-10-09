@@ -821,3 +821,10 @@ D:\music-download\
 - **封面进度环**：封面右上叠加 SVG 环（track + fill），`stroke-dashoffset` 绑定播放进度 `pct`，颜色取当前舞种色。
 - **已点歌滚动条**：顶部新增 `.wall-ticker`，轮询 `/api/requests`（每 10s）取「待处理 / 已采纳」，内容用 CSS marquee（`@keyframes ticker`，文本复制两份、`translateX(0 → -50%)`）循环滚动；无点歌时显示「暂无点歌 · 扫码点歌 →」。
 - **实测**：造队列打开 `/wall` —— `.wall-type` / `.wall-band` 背景 = `rgb(197,160,89)`（平四）、「接下来」里 伦巴 `rgb(197,107,138)` / 慢三 `rgb(127,157,192)`；进度环 `stroke=rgb(197,160,89)`、`stroke-dashoffset` 随进度；造一条点歌后滚动条显示该曲且带 `scroll` 类（`animation: ticker`）；无 console 报错；`smoke-v6` 27/27、`smoke-v7` 14/14。
+
+## 44. 大屏再增强（第二波）：舞种氛围色 + BPM/曲风 + 点歌条计数（✅ 已完成并实测）
+
+- **舞种氛围色**：整屏新增 `.wall-tint` 叠加层，用当前舞种色的径向渐变（`radial-gradient(130% 130% at 85% 0%, <accent>40, transparent 58%)`）做氛围染色，切歌平滑过渡（与色带 / 进度环同色系）。
+- **BPM / 曲风**：`QueueItem` 增加 `bpm` / `mood`（`openPlayer`/`openWall` 从曲库带入），大屏在歌手下方以胶囊展示「115 BPM · 舒缓」。
+- **点歌条增强**：标签显示数量「点歌 N」；已采纳的曲目在滚动文本里带「✓」。
+- **实测**：伦巴曲 → `.wall-tint` = `rgba(197,107,138,0.25)`、`.wall-meta` = 「115 BPM / 舒缓」、点歌条「点歌 1」+「氛围测试曲✓」；`.wall-type` 同步伦巴色；无 console 报错；`smoke-v6` 27/27、`smoke-v7` 14/14。

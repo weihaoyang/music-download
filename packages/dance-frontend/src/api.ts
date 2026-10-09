@@ -76,6 +76,10 @@ export interface QueueItem {
   durationMs?: number;
   /** 整体响度 LUFS（用于播放增益/响度归一化） */
   loudness?: number | null;
+  /** BPM（用于大屏展示） */
+  bpm?: number | null;
+  /** 曲风（舒缓/中/欢快） */
+  mood?: string | null;
 }
 const QUEUE_KEY = 'dance.queue';
 export function setQueue(items: QueueItem[], index = 0): void {

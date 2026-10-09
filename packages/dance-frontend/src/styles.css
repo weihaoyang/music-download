@@ -1390,3 +1390,22 @@ body {
     transform: translateX(-50%);
   }
 }
+.wall-tint {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  transition: background 0.9s ease;
+}
+.wall-meta {
+  margin-top: 0.9vh;
+  display: flex;
+  gap: 0.8vw;
+  font-size: 1vw;
+  color: rgba(26, 58, 95, 0.55);
+  font-variant-numeric: tabular-nums;
+}
+.wall-meta span {
+  border: 1px solid rgba(197, 160, 89, 0.45);
+  border-radius: 999px;
+  padding: 0.12em 0.85em;
+}

@@ -260,7 +260,7 @@ export default function WallApp() {
   const nextLine = lrc.find((l) => l.t > pos + 0.15);
   const upcoming = items.slice(idx + 1, idx + 7);
   const accent = typeColor(cur?.type);
-  const reqText = reqs.length ? reqs.map((r) => r.name).join('　·　') : '';
+  const reqText = reqs.length ? reqs.map((r) => r.name + (r.status === 'accepted' ? '✓' : '')).join('　·　') : '';
 
   if (!items.length) {
     return (
@@ -298,6 +298,7 @@ export default function WallApp() {
         />
       ))}
       <div className="wall-veil" />
+      <div className="wall-tint" style={{ background: `radial-gradient(130% 130% at 85% 0%, ${accent}40, transparent 58%)` }} />
 
       <header className="wall-top">
         <span className="wall-brand">舞曲排曲台</span>
@@ -310,7 +311,9 @@ export default function WallApp() {
       </header>
 
       <div className="wall-ticker">
-        <span className="ticker-label">点歌</span>
+        <span className="ticker-label">
+          点歌{reqs.length ? ' ' + reqs.length : ''}
+        </span>
         <div className="ticker-track">
           <span className={'ticker-inner' + (reqs.length ? ' scroll' : '')}>{reqs.length ? reqText + '　　·　　' + reqText : '暂无点歌 · 扫码点歌 →'}</span>
         </div>
@@ -336,6 +339,12 @@ export default function WallApp() {
           {cur?.type ? <span className="wall-type" style={{ background: accent }}>{cur.type}</span> : null}
           <h1 className="wall-title">{cur?.name}</h1>
           <div className="wall-artist">{(cur?.artists || []).join(' / ')}</div>
+          {cur?.bpm || cur?.mood ? (
+            <div className="wall-meta">
+              {cur?.bpm ? <span>{cur.bpm} BPM</span> : null}
+              {cur?.mood ? <span>{cur.mood}</span> : null}
+            </div>
+          ) : null}
 
           <div className="wall-progress">
             <div className="wall-bar" style={{ width: `${pct}%` }} />

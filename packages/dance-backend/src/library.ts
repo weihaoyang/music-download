@@ -104,21 +104,68 @@ function normalizeTrack(s: LibrarySong): boolean {
   return changed;
 }
 
-/** 默认曲库：按舞种分类的元数据缓存，浏览/编排零外部依赖 */
+/** 默认曲库：按舞种分类的元数据缓存（SQLite 存储；无 node:sqlite 时回退 JSON） */
 export class LibraryStore {
   private data: Record<string, LibrarySong[]> = {};
+  // node:sqlite 的极简类型（避免引入依赖）
+  private db: { exec: (s: string) => void; prepare: (s: string) => { run: (...a: unknown[]) => void; all: () => Array<{ data: string }> } } | null = null;
+  private readonly sqlitePath: string;
 
   constructor(
     private readonly file: string,
     private readonly legacyFile?: string,
-  ) {}
+  ) {
+    this.sqlitePath = file.replace(/\.json$/, '.sqlite');
+  }
+
+  /** 尝试打开 SQLite（Node ≥22.5 的 node:sqlite，无需原生编译） */
+  private openDb(): boolean {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { DatabaseSync } = require('node:sqlite') as { DatabaseSync: new (p: string) => unknown };
+      const db = new DatabaseSync(this.sqlitePath) as NonNullable<LibraryStore['db']>;
+      db.exec('CREATE TABLE IF NOT EXISTS tracks (mid TEXT PRIMARY KEY, type TEXT NOT NULL, data TEXT NOT NULL)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_tracks_type ON tracks(type)');
+      this.db = db;
+      return true;
+    } catch {
+      this.db = null;
+      return false;
+    }
+  }
 
   async load(): Promise<void> {
+    if (this.openDb()) {
+      const rows = this.db!.prepare('SELECT data FROM tracks').all();
+      if (rows.length) {
+        this.data = {};
+        for (const r of rows) {
+          try {
+            const s = JSON.parse(r.data) as LibrarySong;
+            (this.data[s.type] ??= []).push(s);
+          } catch {
+            /* 跳过坏行 */
+          }
+        }
+      } else {
+        // 首次：从 tracks.json（this.file）或旧 library.json（legacyFile）迁移
+        const legacy = (await readJson<unknown | null>(this.file, null)) as LibraryDoc | Record<string, LibrarySong[]> | null;
+        let data: Record<string, LibrarySong[]> = {};
+        if (legacy && typeof legacy === 'object' && 'collections' in (legacy as Record<string, unknown>)) data = (legacy as LibraryDoc).collections ?? {};
+        else if (legacy && typeof legacy === 'object') data = legacy as Record<string, LibrarySong[]>;
+        else if (this.legacyFile) data = await readJson<Record<string, LibrarySong[]>>(this.legacyFile, {});
+        this.data = data;
+      }
+      let changed = rows.length === 0;
+      for (const songs of Object.values(this.data)) for (const s of songs) if (normalizeTrack(s)) changed = true;
+      if (changed) await this.save();
+      return;
+    }
+    // JSON 回退
     const raw = (await readJson<unknown | null>(this.file, null)) as LibraryDoc | Record<string, LibrarySong[]> | null;
     if (raw && typeof raw === 'object' && 'collections' in (raw as Record<string, unknown>)) {
       this.data = (raw as LibraryDoc).collections ?? {};
     } else if (raw && typeof raw === 'object') {
-      // 旧 library.json 结构：type -> songs[]
       this.data = raw as Record<string, LibrarySong[]>;
     } else if (this.legacyFile) {
       this.data = await readJson<Record<string, LibrarySong[]>>(this.legacyFile, {});
@@ -129,6 +176,22 @@ export class LibraryStore {
   }
 
   private save(): Promise<void> {
+    if (this.db) {
+      // 原子全量替换（事务）
+      const db = this.db;
+      const del = db.prepare('DELETE FROM tracks');
+      const ins = db.prepare('INSERT INTO tracks (mid, type, data) VALUES (?, ?, ?)');
+      db.exec('BEGIN');
+      try {
+        del.run();
+        for (const [type, songs] of Object.entries(this.data)) for (const s of songs) ins.run(s.mid, type, JSON.stringify(s));
+        db.exec('COMMIT');
+      } catch (e) {
+        db.exec('ROLLBACK');
+        throw e;
+      }
+      return Promise.resolve();
+    }
     return writeJson(this.file, { schemaVersion: 2, collections: this.data } as LibraryDoc);
   }
 

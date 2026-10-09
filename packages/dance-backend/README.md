@@ -123,7 +123,7 @@ const poll = setInterval(async () => {
 
 ## 数据文件
 
-- `data/tracks.json`：默认曲库（schema v2：`{schemaVersion:2, collections}`；每首含 `provenance`/`assets`；首次启动自动从旧 `library.json` 迁移）
+- `data/tracks.sqlite`：默认曲库（Node 内置 `node:sqlite`，原子事务写；首次启动自动从旧 `library.json` / `tracks.json` 迁移）。若运行环境无 `node:sqlite`（Node < 22.5）则回退 `data/tracks.json`（schema v2：`{schemaVersion:2, collections}`；每首含 `provenance`/`assets`）。
 - `data/media/`：**本地音频缓存**（`<songmid>.mp3` 等）
 - `data/sessions.json`：用户登录态（含 cookie，注意权限，**勿入库/勿外泄**）
 

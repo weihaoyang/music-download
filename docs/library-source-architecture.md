@@ -160,7 +160,7 @@ GET /api/track/:id/stream
 
 ## 8. 迁移方案
 
-- 存储拆/升级：`data/library.json` → `data/tracks.json`（带 `schemaVersion:2`）；启动时若发现旧结构则**自动迁移**：
+- 存储拆/升级：`data/library.json` → 曲库（当前为 `data/tracks.sqlite`，Node 内置 `node:sqlite` 原子事务；无 `node:sqlite` 时回退 `data/tracks.json`，带 `schemaVersion:2`）；启动时若发现旧结构则**自动迁移**：
   - `id = 'qq:' + mid`；`provenance.origin = {source:'qqmusic', mid}`；`rights:'external'`（若 `type`/文件名像剪辑版则 `club`）。
   - `file → assets[0] = {kind:'original', source:'qqmusic', file, sizeBytes}`；`primaryAssetId` 指向它。
   - 原有 `bpm/mood/stability/suitable/warning/liked/playedAt` → `tags` / asset。
@@ -210,6 +210,6 @@ GET /api/track/:id/stream
 
 **前端（已做）**：搜索页可切 QQ/网易云并一键「+ 加入曲库」；「导入来源」页含 QQ/网易云/本地文件夹/直链 四种入口；曲目行显示**来源 chip**；设置里可填 `neteaseCookie`。
 
-**模型（已升级 schema v2）**：曲库存储由 `data/library.json` 迁移为 **`data/tracks.json`**（`{schemaVersion:2, collections}`）；每首 Track 含 `provenance`（`rights: external|club`、`edited`、`origin` 溯源）与 `assets[]` + `primaryAssetId`，并与原扁平字段并存以兼容。归属/是否编辑过可在编辑弹窗修改。
+**模型（已升级 schema v2）**：曲库存储由 `data/library.json` 迁移为 SQLite（**`data/tracks.sqlite`**，Node 内置 `node:sqlite`，原子事务写；无 `node:sqlite` 时回退 `data/tracks.json` 的 `{schemaVersion:2, collections}`）；每首 Track 含 `provenance`（`rights: external|club`、`edited`、`origin` 溯源）与 `assets[]` + `primaryAssetId`，并与原扁平字段并存以兼容。归属/是否编辑过可在编辑弹窗修改。
 
 **尚未做**：`/api/library/import` 老接口的收编（QQ 歌单已可用通用 `/api/source/qqmusic/import`）。

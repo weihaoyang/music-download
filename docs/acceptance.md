@@ -47,7 +47,7 @@
 | `/wall` | ✅ 标题/进度/「接下来」/4 控制/双图层背景，封面 Ken Burns + 光晕，切歌淡入淡出 |
 
 ## 5. 数据模型
-- 存储 **schema v2**：`data/tracks.json` = `{schemaVersion:2, collections}`；首次启动自动从旧 `library.json` 迁移。
+- 存储 **schema v2**：曲库持久化为 `data/tracks.sqlite`（Node 内置 `node:sqlite`，原子事务写）；首次启动自动从旧 `library.json` / `tracks.json` 迁移，且 `node:sqlite` 不可用时回退 `data/tracks.json`（`{schemaVersion:2, collections}`）。
 - 每首 Track：`provenance{rights,edited,origin}` + `assets[]` + `primaryAssetId`（与原扁平字段并存，兼容）。
 - 「我喜欢」为稳定合集（`liked` 标记，跨舞种保留）。
 

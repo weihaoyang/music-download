@@ -49,6 +49,8 @@ export interface LibrarySong {
   suitable?: boolean | null;
   /** 不适合时的提示语 */
   warning?: string | null;
+  /** 整体响度 LUFS（用于播放增益/响度归一化） */
+  loudness?: number | null;
   /** 本地缓存文件大小（字节） */
   sizeBytes?: number | null;
   /** 最近一次播放时间（用于 LRU 淘汰） */
@@ -319,7 +321,7 @@ export class LibraryStore {
   /** 编辑歌曲元数据（可改舞种，改舞种时移动到对应列表） */
   async updateSong(
     mid: string,
-    patch: Partial<Pick<LibrarySong, 'name' | 'artists' | 'album' | 'type' | 'file' | 'coverUrl' | 'bpm' | 'meter' | 'confidence' | 'energy' | 'mood' | 'stability' | 'suitable' | 'warning'>> & {
+    patch: Partial<Pick<LibrarySong, 'name' | 'artists' | 'album' | 'type' | 'file' | 'coverUrl' | 'bpm' | 'meter' | 'confidence' | 'energy' | 'mood' | 'stability' | 'suitable' | 'warning' | 'loudness'>> & {
       /** schema v2：归属 external/club */
       rights?: 'external' | 'club';
       /** schema v2：是否编辑过 */
@@ -342,6 +344,7 @@ export class LibraryStore {
     if (patch.stability !== undefined) song.stability = patch.stability;
     if (patch.suitable !== undefined) song.suitable = patch.suitable;
     if (patch.warning !== undefined) song.warning = patch.warning;
+    if (patch.loudness !== undefined) song.loudness = patch.loudness;
     if (patch.rights !== undefined || patch.edited !== undefined) {
       song.provenance = song.provenance ?? { rights: 'external', edited: false, origin: originOf(song) };
       if (patch.rights !== undefined) song.provenance.rights = patch.rights;

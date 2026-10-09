@@ -43,13 +43,14 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.netease = exports.createSourceRegistry = exports.extractCover = exports.probeDurationMs = exports.MediaCache = void 0;
+exports.netease = exports.createSourceRegistry = exports.probeLoudness = exports.extractCover = exports.probeDurationMs = exports.MediaCache = void 0;
 __exportStar(require("./classifier"), exports);
 __exportStar(require("./localscan"), exports);
 var media_1 = require("./media");
 Object.defineProperty(exports, "MediaCache", { enumerable: true, get: function () { return media_1.MediaCache; } });
 Object.defineProperty(exports, "probeDurationMs", { enumerable: true, get: function () { return media_1.probeDurationMs; } });
 Object.defineProperty(exports, "extractCover", { enumerable: true, get: function () { return media_1.extractCover; } });
+Object.defineProperty(exports, "probeLoudness", { enumerable: true, get: function () { return media_1.probeLoudness; } });
 __exportStar(require("./sources/types"), exports);
 var registry_1 = require("./sources/registry");
 Object.defineProperty(exports, "createSourceRegistry", { enumerable: true, get: function () { return registry_1.createSourceRegistry; } });

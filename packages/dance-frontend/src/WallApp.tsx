@@ -26,6 +26,14 @@ function mmss(sec: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
+/** 响度归一化目标（LUFS）与增益（dB 限幅 ±12dB） */
+const TARGET_LUFS = -16;
+function trackGain(loudness?: number | null): number {
+  if (loudness == null) return 1;
+  const db = Math.min(12, Math.max(-12, TARGET_LUFS - loudness));
+  return Math.pow(10, db / 20);
+}
+
 /** 舞会大屏播放（/wall）：howler + anime；切歌自动淡出→切换→淡入 */
 export default function WallApp() {
   const q = getQueue();
@@ -85,7 +93,7 @@ export default function WallApp() {
     });
     soundRef.current = s;
     s.play();
-    s.fade(0, 1, FADE_IN);
+    s.fade(0, trackGain(cur.loudness), FADE_IN);
     fetch('/api/song/lyric?mid=' + encodeURIComponent(cur.mid) + '&json=1')
       .then((r) => r.json())
       .then((j) => setLrc(parseLrc(j?.data?.lyric || '')))
@@ -183,7 +191,7 @@ export default function WallApp() {
     else {
       s.volume(0);
       s.play();
-      s.fade(0, 1, FADE_IN);
+      s.fade(0, trackGain(cur?.loudness), FADE_IN);
     }
   }
   function fullscreen() {

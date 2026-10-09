@@ -34,6 +34,20 @@ export function extractCover(src: string, dest: string): Promise<boolean> {
   });
 }
 
+/** 用 ffmpeg loudnorm 读整体响度（LUFS，越大越响）；失败返回 null */
+export function probeLoudness(file: string): Promise<number | null> {
+  return new Promise((resolve) => {
+    const p = spawn(ffmpegPath, ['-hide_banner', '-i', file, '-af', 'loudnorm=print_format=json', '-f', 'null', '-'], { windowsHide: true });
+    let err = '';
+    p.stderr.on('data', (d: Buffer) => (err += d.toString()));
+    p.on('error', () => resolve(null));
+    p.on('close', () => {
+      const m = err.match(/"input_i"\s*:\s*"?(-?\d+(?:\.\d+)?)"?/);
+      resolve(m ? Number(m[1]) : null);
+    });
+  });
+}
+
 /** 本地音频缓存：下载成文件（统一转成 mp3），彻底摆脱运行时对 QQ 的依赖 */
 export class MediaCache {
   private active = 0;

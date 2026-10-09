@@ -8,7 +8,7 @@
 
 export * from './classifier';
 export * from './localscan';
-export { MediaCache, probeDurationMs, extractCover } from './media';
+export { MediaCache, probeDurationMs, extractCover, probeLoudness } from './media';
 export * from './sources/types';
 export { createSourceRegistry } from './sources/registry';
 export * as netease from './sources/netease';

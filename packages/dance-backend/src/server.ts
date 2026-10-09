@@ -14,7 +14,7 @@ import { TaskStore } from './tasks';
 import { SetlistStore, generateSetlist, checkSetlist, type EventMeta } from './setlist';
 import { SettingsStore } from './settings';
 import { RequestStore } from './requests';
-import { analyze, MediaCache, createSourceRegistry, scanDanceDir, coreName, localMid, extractCover, netease, type TrackMeta } from '@hdbc/dance-sdk';
+import { analyze, MediaCache, createSourceRegistry, scanDanceDir, coreName, localMid, extractCover, probeLoudness, netease, type TrackMeta } from '@hdbc/dance-sdk';
 import { sendJson, readBody, parseCookies, setCookie, clearCookie } from './http';
 
 const MIME: Record<string, string> = {
@@ -176,6 +176,9 @@ export function createServer(cfg: BackendConfig) {
         /* ignore */
       }
       if (!file) return;
+      // 响度归一化：记录整体响度（LUFS），供播放端做增益
+      const loud = await probeLoudness(media.absPath(file)).catch(() => null);
+      if (loud != null) await library.updateSong(m, { loudness: loud }).catch(() => undefined);
       if (eff().autoClassify) await classifyOne(m, file);
       await enforceCacheLimit();
     })();

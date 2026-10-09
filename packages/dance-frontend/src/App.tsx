@@ -405,9 +405,9 @@ export default function App() {
     return () => window.clearInterval(timer);
   }, [task, activeType]);
 
-  type Playable = { mid: string; name: string; artists: string[]; coverUrl?: string | null; playMs?: number | null; type?: string; durationMs?: number };
+  type Playable = { mid: string; name: string; artists: string[]; coverUrl?: string | null; playMs?: number | null; type?: string; durationMs?: number; loudness?: number | null };
   function openPlayer(songs2: Playable[], index = 0, route = '/play') {
-    storeQueue(songs2.map((s) => ({ mid: s.mid, name: s.name, artists: s.artists, coverUrl: s.coverUrl, playMs: s.playMs ?? null, type: s.type, durationMs: s.durationMs })), index);
+    storeQueue(songs2.map((s) => ({ mid: s.mid, name: s.name, artists: s.artists, coverUrl: s.coverUrl, playMs: s.playMs ?? null, type: s.type, durationMs: s.durationMs, loudness: s.loudness ?? null })), index);
     window.open(route, '_blank');
   }
   function openWall(songs2: Playable[]) {

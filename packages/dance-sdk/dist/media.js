@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.MediaCache = void 0;
 exports.probeDurationMs = probeDurationMs;
 exports.extractCover = extractCover;
+exports.probeLoudness = probeLoudness;
 const promises_1 = __importDefault(require("fs/promises"));
 const path_1 = __importDefault(require("path"));
 const child_process_1 = require("child_process");
@@ -36,6 +37,19 @@ function extractCover(src, dest) {
             catch {
                 resolve(false);
             }
+        });
+    });
+}
+/** 用 ffmpeg loudnorm 读整体响度（LUFS，越大越响）；失败返回 null */
+function probeLoudness(file) {
+    return new Promise((resolve) => {
+        const p = (0, child_process_1.spawn)(ffmpegPath, ['-hide_banner', '-i', file, '-af', 'loudnorm=print_format=json', '-f', 'null', '-'], { windowsHide: true });
+        let err = '';
+        p.stderr.on('data', (d) => (err += d.toString()));
+        p.on('error', () => resolve(null));
+        p.on('close', () => {
+            const m = err.match(/"input_i"\s*:\s*"?(-?\d+(?:\.\d+)?)"?/);
+            resolve(m ? Number(m[1]) : null);
         });
     });
 }

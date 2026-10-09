@@ -793,3 +793,14 @@ D:\music-download\
 - **收编**：把 `/api/library/import` 从「直接调 QQ SDK `playlists.importPlaylist` + `library.importDetail`」改为**统一走 qqmusic 来源**（`sources.get('qqmusic').build(body)` 解析歌单/单曲）再交给共享的 `importBuiltTracks()`（本地文件 `addLocalSong` + 内嵌封面；其余 `addExternalSongs` 按舞种分组）。`/api/source/:id/import` 也改用同一 helper，两条路径合一；响应保持兼容（保留 `type` 字段）。
 - **清理**：删除导入来源页里**永远不可达**的「百度网盘」分支（`SOURCE_OPTIONS` 本就没有 `pan`；`importPan` / `panShare` / `panPwd` 及对应 JSX/hint 移除），消除指向不存在来源 `/api/source/pan/import` 的死引用。
 - **实测**：`/api/library/import {type,songMid}` → 200（name 正确、added 1、queued 1、有 taskId），同曲再走 `/api/source/qqmusic/import` → added 0 / skipped 1；`smoke-v6` 27/27、`smoke-v7` 14/14；导入来源页渲染四个来源、无「百度网盘」、无 console 报错。文档中「尚未做」项已完成。
+
+## 41. SDK 单元测试 + CI 加固（✅ 已完成并实测）
+
+- **`@hdbc/dance-sdk` 单测**：新增 `src/test/dance-sdk.test.ts`（`node:test` + `assert/strict`，**16 例**）覆盖纯逻辑：
+  - `classify`：各舞种「中心速度 + 匹配拍号/曲风」命中自身；区间外按到中心值距离取最近（103→伦巴，不被曲风带偏）；非法/零速度返回空类型；置信度落在 0~1。
+  - `DANCE_TYPES`：区间有序、中心落在区间内。
+  - `buildOnset` / `estimateEnergy` / `pulseClarity` / `beatProminence`：用合成信号（静音、阶跃、高频交替、周期脉冲 vs 随机）验证。
+  - `parseDanceFileName`（多歌手、时长、下划线/全角连字符、不合规 → null）、`coreName`、`localMid`、`netease.extractNeId`。
+  - `package.json` 增加 `test` 脚本（`tsc && node --test dist/test/*.test.js`）。
+- **CI 加固**：`.github/workflows/ci.yml` Node 升到 **24**（与 Docker 一致；后端 `node:sqlite` 需 ≥22.5）；新增 `dance-sdk` 单测步骤；保留 `qqmusic-sdk` 单测 + 三端构建。
+- **实测**：`dance-sdk` **16/16**、`qqmusic-sdk` **12/12**；四个包本地构建均通过。

@@ -115,7 +115,7 @@ export default function App() {
   const [searchSource, setSearchSource] = useState<'qqmusic' | 'netease'>('qqmusic');
   const [addType, setAddType] = useState('未分类');
   const [sourceFilter, setSourceFilter] = useState('all');
-  const [importSource, setImportSource] = useState<'qqmusic' | 'netease' | 'local' | 'http' | 'pan'>('qqmusic');
+  const [importSource, setImportSource] = useState<'qqmusic' | 'netease' | 'local' | 'http'>('qqmusic');
   const [neInput, setNeInput] = useState('');
   const [localDir, setLocalDir] = useState('');
   const [localRec, setLocalRec] = useState(true);
@@ -833,15 +833,10 @@ export default function App() {
               <div className="panel-head">
                 <span className="panel-title">搜索</span>
                 <div className="panel-actions">
-                  <Select
-                    value={searchSource}
-                    onChange={(v) => setSearchSource(v as 'qqmusic' | 'netease')}
-                    style={{ width: 130 }}
-                    optionList={[
-                      { value: 'qqmusic', label: 'QQ音乐' },
-                      { value: 'netease', label: '网易云音乐' },
-                    ]}
-                  />
+                  <RadioGroup type="button" value={searchSource} onChange={(e) => setSearchSource(e.target.value as 'qqmusic' | 'netease')}>
+                    <Radio value="qqmusic">QQ音乐</Radio>
+                    <Radio value="netease">网易云音乐</Radio>
+                  </RadioGroup>
                   <Input value={kw} onChange={setKw} onEnterPress={doSearch} placeholder="歌曲 / 歌手" style={{ width: 250 }} />
                   <Select allowCreate value={addType} onChange={(v) => setAddType(v as string)} style={{ width: 130 }} optionList={typeOptions} placeholder="加入舞种" />
                   <Button theme="solid" type="primary" onClick={doSearch} loading={loadingSearch}>
@@ -871,12 +866,13 @@ export default function App() {
               <div className="panel-head">
                 <span className="panel-title">导入来源</span>
                 <div className="panel-actions">
-                  <Select
-                    value={importSource}
-                    onChange={(v) => setImportSource(v as 'qqmusic' | 'netease' | 'local' | 'http' | 'pan')}
-                    style={{ width: 160 }}
-                    optionList={SOURCE_OPTIONS}
-                  />
+                  <RadioGroup type="button" value={importSource} onChange={(e) => setImportSource(e.target.value as 'qqmusic' | 'netease' | 'local' | 'http')}>
+                    {SOURCE_OPTIONS.map((o) => (
+                      <Radio key={o.value} value={o.value}>
+                        {o.label}
+                      </Radio>
+                    ))}
+                  </RadioGroup>
                   <Select allowCreate value={importType} onChange={(v) => setImportType(v as string)} style={{ width: 150 }} optionList={typeOptions} placeholder="目标舞种" />
                 </div>
               </div>

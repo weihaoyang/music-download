@@ -873,3 +873,11 @@ D:\music-download\
   - `DURATION` 总时长与目标偏差 > max(2 分, 10%)（info）。
   - 提示信息都带「第 N 首《歌名》」便于定位。`/api/setlist/generate` 与 `/check` 都会带上目标时长。
 - **实测**：`generate {durationMin:45, autoTrim:true}` → 返回 `allocation`（快三 793s/5 首 …）、**6 首被裁到 240s**、含 `DURATION`；合成排曲 `checkSetlist` 触发 `DUPLICATE/CONSEC_SAME/TYPE_REPEAT/ARTIST_REPEAT/NO_OPEN/LONG/SPEED_RUN/NO_GROUP` 且带歌名；排曲页显示「时长分配：…」与带歌名的提示、自动裁剪开关存在、无 console 报错；`smoke-v6` 27/27、`smoke-v7` 14/14。
+
+## 49. 点歌 → 排曲联动（✅ 已完成并实测）
+
+- **后端**：新增 `GET /api/library/song?mid=`（公开，返回曲库中该曲，404 表示不在库）。
+- **前端（点歌页）**：
+  - 每条点歌新增「**→排曲**」按钮：按 `mid` 取曲库曲目并追加到当前排曲（`gen`），成功后自动切到「排曲」Tab；曲库里没有则提示先入库。
+  - 工具栏新增「**已采纳加入排曲**」：把所有「已采纳」的点歌批量追加（曲库中存在的），提示 `已把 N/M 首加入排曲`。
+- **实测**：`GET /api/library/song?mid=004IIvBM1S55sG` → 200（月亮之上/慢三），未知 mid → 404；点某条点歌「→排曲」→ 自动切到「排曲」Tab 且排曲显示「共 1 首 · 总时长 4 分」含该曲；无 console 报错；`smoke-v6` 27/27、`smoke-v7` 14/14。测试点歌与热度已清理。

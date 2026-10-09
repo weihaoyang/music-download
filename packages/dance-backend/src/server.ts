@@ -793,6 +793,12 @@ export function createServer(cfg: BackendConfig) {
       const dups = [...groups.values()].filter((g) => g.length > 1);
       return sendJson(res, 200, { ok: true, count: dups.length, groups: dups });
     }
+    if (p === '/api/library/song' && method === 'GET') {
+      const mid = url.searchParams.get('mid') || '';
+      const hit = mid ? library.findByMid(mid) : undefined;
+      if (!hit) return sendJson(res, 404, { ok: false, error: 'song not found' });
+      return sendJson(res, 200, { ok: true, data: hit.song });
+    }
     if (p === '/api/library/song' && method === 'PUT') {
       if (!canEdit) return sendJson(res, 403, { ok: false, error: 'forbidden' });
       const body = await readBody(req);

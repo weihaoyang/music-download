@@ -201,7 +201,7 @@ export default function App() {
   const [dupOpen, setDupOpen] = useState(false);
   const [clipOpen, setClipOpen] = useState(false);
   const [clipForm, setClipForm] = useState<{ mid: string; name: string; startS: number; endS: number }>({ mid: '', name: '', startS: 0, endS: 0 });
-  const [reqs, setReqs] = useState<Array<{ id: string; name: string; artists: string[]; requester?: string | null; note?: string | null; status: string }>>([]);
+  const [reqs, setReqs] = useState<Array<{ id: string; name: string; artists: string[]; mid?: string | null; requester?: string | null; note?: string | null; status: string }>>([]);
   const [reqStats, setReqStats] = useState<{ active: number; totalLimit: number; perRequesterLimit: number } | null>(null);
   const [reqPopular, setReqPopular] = useState<Array<{ name: string; artists: string[]; count: number; type?: string | null }>>([]);
   const [reqQr, setReqQr] = useState('');
@@ -312,6 +312,30 @@ export default function App() {
     adminFetch('/api/requests/' + encodeURIComponent(id), 'DELETE')
       .then(() => loadRequests())
       .catch((e) => Toast.error('操作失败：' + e.message));
+  }
+  /** 把一条点歌加入当前排曲（需该曲已在曲库） */
+  async function requestToSetlist(r: { mid?: string | null; name: string }, silent = false): Promise<boolean> {
+    if (!r.mid) {
+      if (!silent) Toast.warning(`《${r.name}》没有曲库 ID，请先把它加入曲库`);
+      return false;
+    }
+    try {
+      const res = await api<{ data: LibrarySong }>('/api/library/song?mid=' + encodeURIComponent(r.mid));
+      const song = res.data;
+      setGen((g) => [...g, { ...song, playMs: null }]);
+      if (!silent) Toast.success(`已把《${song.name}》加入排曲`);
+      return true;
+    } catch {
+      if (!silent) Toast.warning(`曲库里没有《${r.name}》，请先把它加入曲库`);
+      return false;
+    }
+  }
+  async function addAcceptedToSetlist() {
+    const acc = reqs.filter((r) => r.status === 'accepted');
+    if (!acc.length) return Toast.warning('没有「已采纳」的点歌');
+    let n = 0;
+    for (const r of acc) if (await requestToSetlist(r, true)) n++;
+    Toast.success(`已把 ${n}/${acc.length} 首加入排曲${n < acc.length ? '（其余曲库里没有，请先入库）' : ''}`);
   }
   function resetReqs() {
     setAdminToken(adminTokenState);
@@ -1596,6 +1620,7 @@ export default function App() {
                 <div className="panel-actions">
                   {reqStats ? <span className="hint">已点 {reqStats.active}/{reqStats.totalLimit} · 每人 ≤{reqStats.perRequesterLimit}</span> : null}
                   <Button onClick={loadRequests}>刷新</Button>
+                  <Button onClick={addAcceptedToSetlist}>已采纳加入排曲</Button>
                   <Button theme="borderless" type="danger" onClick={resetReqs}>
                     清空（新一场）
                   </Button>
@@ -1616,6 +1641,9 @@ export default function App() {
                           {r.status === 'accepted' ? '已采纳' : r.status === 'rejected' ? '已拒绝' : r.status === 'played' ? '已播放' : '待处理'}
                         </span>
                         <span className="req-actions">
+                          <Button size="small" theme="borderless" onClick={() => requestToSetlist(r).then((ok) => (ok ? setActiveTab('setlist') : undefined))}>
+                            →排曲
+                          </Button>
                           {r.status !== 'accepted' ? (
                             <Button size="small" onClick={() => setReqStatus(r.id, 'accepted')}>
                               采纳

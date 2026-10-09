@@ -321,7 +321,7 @@ export class LibraryStore {
   /** 编辑歌曲元数据（可改舞种，改舞种时移动到对应列表） */
   async updateSong(
     mid: string,
-    patch: Partial<Pick<LibrarySong, 'name' | 'artists' | 'album' | 'type' | 'file' | 'coverUrl' | 'bpm' | 'meter' | 'confidence' | 'energy' | 'mood' | 'stability' | 'suitable' | 'warning' | 'loudness'>> & {
+    patch: Partial<Pick<LibrarySong, 'name' | 'artists' | 'album' | 'type' | 'file' | 'coverUrl' | 'bpm' | 'meter' | 'confidence' | 'energy' | 'mood' | 'stability' | 'suitable' | 'warning' | 'loudness' | 'durationMs'>> & {
       /** schema v2：归属 external/club */
       rights?: 'external' | 'club';
       /** schema v2：是否编辑过 */
@@ -345,6 +345,7 @@ export class LibraryStore {
     if (patch.suitable !== undefined) song.suitable = patch.suitable;
     if (patch.warning !== undefined) song.warning = patch.warning;
     if (patch.loudness !== undefined) song.loudness = patch.loudness;
+    if (patch.durationMs !== undefined) song.durationMs = patch.durationMs;
     if (patch.rights !== undefined || patch.edited !== undefined) {
       song.provenance = song.provenance ?? { rights: 'external', edited: false, origin: originOf(song) };
       if (patch.rights !== undefined) song.provenance.rights = patch.rights;

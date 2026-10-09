@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.MediaCache = void 0;
 exports.probeDurationMs = probeDurationMs;
 exports.extractCover = extractCover;
+exports.clipAudio = clipAudio;
 exports.probeLoudness = probeLoudness;
 const promises_1 = __importDefault(require("fs/promises"));
 const path_1 = __importDefault(require("path"));
@@ -26,6 +27,32 @@ function probeDurationMs(file) {
 function extractCover(src, dest) {
     return new Promise((resolve) => {
         const p = (0, child_process_1.spawn)(ffmpegPath, ['-v', 'error', '-y', '-i', src, '-an', '-vcodec', 'copy', dest], { windowsHide: true });
+        p.on('error', () => resolve(false));
+        p.on('close', async (code) => {
+            if (code !== 0)
+                return resolve(false);
+            try {
+                const st = await promises_1.default.stat(dest);
+                resolve(st.size > 0);
+            }
+            catch {
+                resolve(false);
+            }
+        });
+    });
+}
+/** 用 ffmpeg 从 src 剪出 [startMs,endMs) 到 dest（流复制，快速）；成功返回 true */
+function clipAudio(src, dest, startMs, endMs) {
+    return new Promise((resolve) => {
+        const start = Math.max(0, startMs) / 1000;
+        const args = ['-v', 'error', '-y'];
+        if (start > 0)
+            args.push('-ss', String(start));
+        args.push('-i', src);
+        if (endMs && endMs > startMs)
+            args.push('-t', String((endMs - startMs) / 1000));
+        args.push('-c', 'copy', '-avoid_negative_ts', 'make_zero', dest);
+        const p = (0, child_process_1.spawn)(ffmpegPath, args, { windowsHide: true });
         p.on('error', () => resolve(false));
         p.on('close', async (code) => {
             if (code !== 0)

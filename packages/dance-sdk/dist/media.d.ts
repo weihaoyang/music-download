@@ -3,6 +3,8 @@ import type { Logger, QQMusicClient, Quality } from '@hdbc/qqmusic-sdk';
 export declare function probeDurationMs(file: string): Promise<number>;
 /** 提取内嵌封面到 dest；成功且非空返回 true */
 export declare function extractCover(src: string, dest: string): Promise<boolean>;
+/** 用 ffmpeg 从 src 剪出 [startMs,endMs) 到 dest（流复制，快速）；成功返回 true */
+export declare function clipAudio(src: string, dest: string, startMs: number, endMs?: number | null): Promise<boolean>;
 /** 用 ffmpeg loudnorm 读整体响度（LUFS，越大越响）；失败返回 null */
 export declare function probeLoudness(file: string): Promise<number | null>;
 /** 本地音频缓存：下载成文件（统一转成 mp3），彻底摆脱运行时对 QQ 的依赖 */

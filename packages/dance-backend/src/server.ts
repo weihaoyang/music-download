@@ -14,7 +14,7 @@ import { TaskStore } from './tasks';
 import { SetlistStore, generateSetlist, checkSetlist, type EventMeta } from './setlist';
 import { SettingsStore } from './settings';
 import { RequestStore } from './requests';
-import { analyze, MediaCache, createSourceRegistry, scanDanceDir, coreName, localMid, extractCover, probeLoudness, netease, type TrackMeta } from '@hdbc/dance-sdk';
+import { analyze, MediaCache, createSourceRegistry, scanDanceDir, coreName, localMid, extractCover, probeLoudness, clipAudio, probeDurationMs, netease, type TrackMeta } from '@hdbc/dance-sdk';
 import { sendJson, readBody, parseCookies, setCookie, clearCookie } from './http';
 
 const MIME: Record<string, string> = {
@@ -625,6 +625,25 @@ export function createServer(cfg: BackendConfig) {
       if (!mid) return sendJson(res, 400, { ok: false, error: 'mid required' });
       const taskId = await queueDownloads([mid], null);
       return sendJson(res, 200, { ok: true, queued: 1, taskId });
+    }
+    // 真实剪辑：用 ffmpeg 剪出区间，替换为该曲目的播放版本（标「已编辑」）
+    if (p === '/api/library/clip' && method === 'POST') {
+      if (!isAdmin) return sendJson(res, 403, { ok: false, error: 'forbidden' });
+      const body = await readBody(req);
+      const mid = String(body.mid || '');
+      const hit = library.findByMid(mid);
+      if (!hit) return sendJson(res, 404, { ok: false, error: 'song not found' });
+      if (!hit.song.file || !(await media.exists(hit.song.file))) return sendJson(res, 400, { ok: false, error: 'NO_FILE', message: '需先缓存该曲目才能剪辑' });
+      const startMs = Math.max(0, Number(body.startMs ?? 0));
+      const endMs = body.endMs != null ? Number(body.endMs) : body.playMs != null ? startMs + Number(body.playMs) : null;
+      const outFile = `${mid}-clip-${Date.now()}.mp3`;
+      const ok = await clipAudio(media.absPath(hit.song.file), media.absPath(outFile), startMs, endMs).catch(() => false);
+      if (!ok) return sendJson(res, 502, { ok: false, error: 'CLIP_FAILED', message: 'ffmpeg 剪辑失败' });
+      const size = await media.sizeOf(outFile);
+      const durationMs = await probeDurationMs(media.absPath(outFile));
+      await library.setFile(mid, outFile, size);
+      await library.updateSong(mid, { durationMs: durationMs || hit.song.durationMs, edited: true, ...(body.name ? { name: String(body.name) } : {}) });
+      return sendJson(res, 200, { ok: true, file: outFile, durationMs, sizeBytes: size });
     }
     // 按来源清空曲库（可顺带删除缓存文件；绝不删用户本地文件）
     if (p === '/api/library/delete-by-source' && method === 'POST') {

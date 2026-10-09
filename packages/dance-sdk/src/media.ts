@@ -34,6 +34,29 @@ export function extractCover(src: string, dest: string): Promise<boolean> {
   });
 }
 
+/** 用 ffmpeg 从 src 剪出 [startMs,endMs) 到 dest（流复制，快速）；成功返回 true */
+export function clipAudio(src: string, dest: string, startMs: number, endMs?: number | null): Promise<boolean> {
+  return new Promise((resolve) => {
+    const start = Math.max(0, startMs) / 1000;
+    const args = ['-v', 'error', '-y'];
+    if (start > 0) args.push('-ss', String(start));
+    args.push('-i', src);
+    if (endMs && endMs > startMs) args.push('-t', String((endMs - startMs) / 1000));
+    args.push('-c', 'copy', '-avoid_negative_ts', 'make_zero', dest);
+    const p = spawn(ffmpegPath, args, { windowsHide: true });
+    p.on('error', () => resolve(false));
+    p.on('close', async (code) => {
+      if (code !== 0) return resolve(false);
+      try {
+        const st = await fs.stat(dest);
+        resolve(st.size > 0);
+      } catch {
+        resolve(false);
+      }
+    });
+  });
+}
+
 /** 用 ffmpeg loudnorm 读整体响度（LUFS，越大越响）；失败返回 null */
 export function probeLoudness(file: string): Promise<number | null> {
   return new Promise((resolve) => {

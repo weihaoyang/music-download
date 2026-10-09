@@ -90,6 +90,11 @@ const IDownload = () => (
     <path d="M11 3h2v8h3.5L12 15.5 7.5 11H11V3zM5 19h14v2H5z" />
   </svg>
 );
+const IScissors = () => (
+  <svg viewBox="0 0 24 24">
+    <path d="M9.6 6.5a3 3 0 1 0-1.3 2.5L10.6 11l-2.3 2a3 3 0 1 0 1.3 2.5l2-1.8 6.5 5.3v-2.4l-5.1-4.1 5.1-4.1V6l-6.5 5.3-2-1.8zM6 5.5A1.5 1.5 0 1 1 6 8.5 1.5 1.5 0 0 1 6 5.5zm0 10a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z" />
+  </svg>
+);
 const SOURCE_LABELS: Record<string, string> = {
   qqmusic: 'QQ音乐',
   netease: '网易云',
@@ -156,6 +161,8 @@ export default function App() {
   const [status, setStatus] = useState<any>(null);
   const [dups, setDups] = useState<Array<Array<{ mid: string; name: string; artists: string[]; type: string; source: string; file: boolean; durationMs: number }>> | null>(null);
   const [dupOpen, setDupOpen] = useState(false);
+  const [clipOpen, setClipOpen] = useState(false);
+  const [clipForm, setClipForm] = useState<{ mid: string; name: string; startS: number; endS: number }>({ mid: '', name: '', startS: 0, endS: 0 });
   const [reqs, setReqs] = useState<Array<{ id: string; name: string; artists: string[]; requester?: string | null; note?: string | null; status: string }>>([]);
   const [reqStats, setReqStats] = useState<{ active: number; totalLimit: number; perRequesterLimit: number } | null>(null);
   const [reqQr, setReqQr] = useState('');
@@ -507,6 +514,23 @@ export default function App() {
       })
       .catch((e) => Toast.error('保存失败：' + e.message));
   }
+  function openClip(s: LibrarySong) {
+    setClipForm({ mid: s.mid, name: s.name, startS: 0, endS: Math.max(1, Math.round((s.durationMs || 0) / 1000)) });
+    setClipOpen(true);
+  }
+  function doClip() {
+    setAdminToken(adminTokenState);
+    const startMs = Math.max(0, clipForm.startS) * 1000;
+    const endMs = clipForm.endS > clipForm.startS ? clipForm.endS * 1000 : null;
+    adminFetch('/api/library/clip', 'POST', { mid: clipForm.mid, startMs, endMs, name: clipForm.name })
+      .then(() => {
+        Toast.success('已生成剪辑版（该曲目播放版本已替换）');
+        setClipOpen(false);
+        loadTypes();
+        if (activeType) loadSongs(activeType);
+      })
+      .catch((e) => Toast.error('剪辑失败：' + e.message));
+  }
   function removeSong(s: LibrarySong) {
     Modal.confirm({
       title: '从曲库移除',
@@ -811,7 +835,7 @@ export default function App() {
   );
   const orderArr = useMemo(() => orderText.split(/[\s,，、→>/-]+/).filter(Boolean), [orderText]);
 
-  function SongRow({ s, list, onAdd, onDownload }: { s: LibrarySong | Song; list: Array<LibrarySong | Song>; onAdd?: () => void; onDownload?: () => void }) {
+  function SongRow({ s, list, onAdd, onDownload, onClip }: { s: LibrarySong | Song; list: Array<LibrarySong | Song>; onAdd?: () => void; onDownload?: () => void; onClip?: () => void }) {
     const isLib = 'type' in s;
     const lib = s as LibrarySong;
     return (
@@ -863,6 +887,9 @@ export default function App() {
             <>
               <IconBtn title="编辑" onClick={() => openEdit(lib)}>
                 <IEdit />
+              </IconBtn>
+              <IconBtn title="剪辑" onClick={() => openClip(lib)}>
+                <IScissors />
               </IconBtn>
               <IconBtn title="移除" danger onClick={() => removeSong(lib)}>
                 <ITrash />
@@ -1452,6 +1479,24 @@ export default function App() {
               {editForm.energy != null ? '（能量 ' + editForm.energy + '）' : ''}
             </div>
           ) : null}
+        </div>
+      </Modal>
+
+      <Modal title="剪辑音频" visible={clipOpen} onOk={doClip} onCancel={() => setClipOpen(false)} okText="生成剪辑版" width={420}>
+        <div className="settings-form">
+          <div className="field">
+            <span>名称</span>
+            <Input value={clipForm.name} onChange={(v) => setClipForm((f) => ({ ...f, name: v }))} />
+          </div>
+          <div className="field">
+            <span>起点（秒）</span>
+            <InputNumber value={clipForm.startS} min={0} step={5} style={{ width: 140 }} onChange={(v) => setClipForm((f) => ({ ...f, startS: Number(v) || 0 }))} />
+          </div>
+          <div className="field">
+            <span>终点（秒）</span>
+            <InputNumber value={clipForm.endS} min={1} step={5} style={{ width: 140 }} onChange={(v) => setClipForm((f) => ({ ...f, endS: Number(v) || 0 }))} />
+          </div>
+          <div className="hint">用 ffmpeg 剪出 [起点, 终点)，作为该曲目的播放版本（替换 file、标「已编辑」，来源保留）。需先缓存该曲目。</div>
         </div>
       </Modal>
 

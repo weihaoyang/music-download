@@ -155,6 +155,9 @@ export default function App() {
 
   const [kw, setKw] = useState('');
   const [results, setResults] = useState<Song[]>([]);
+  const [srcDefs, setSrcDefs] = useState<Array<{ id: string; label: string; search: boolean }>>([]);
+  const [searchSources, setSearchSources] = useState<string[]>([]);
+  const [hideInLib, setHideInLib] = useState(false);
   const [loadingSearch, setLoadingSearch] = useState(false);
 
   const [importUrl, setImportUrl] = useState('');
@@ -500,6 +503,16 @@ export default function App() {
     if (activeTab === 'stats') loadStats();
     if (activeTab === 'requests') loadRequests();
   }, [activeTab]);
+  // 可搜索来源（聚合搜索来源筛选用）
+  useEffect(() => {
+    api<{ data: Array<{ id: string; label: string; search: boolean }> }>('/api/sources')
+      .then((r) => {
+        const s = (r.data || []).filter((d) => d.search);
+        setSrcDefs(s);
+        setSearchSources((cur) => (cur.length ? cur : s.map((d) => d.id)));
+      })
+      .catch(() => {});
+  }, []);
   useEffect(() => {
     if (!task || task.status === 'done') return;
     const timer = window.setInterval(() => {
@@ -667,7 +680,7 @@ export default function App() {
     setLoadingSearch(true);
     const path =
       searchSource === 'all'
-        ? '/api/search/aggregate?keywords=' + encodeURIComponent(kw) + '&limit=15'
+        ? '/api/search/aggregate?keywords=' + encodeURIComponent(kw) + '&limit=15' + (searchSources.length ? '&sources=' + encodeURIComponent(searchSources.join(',')) : '')
         : searchSource === 'netease'
           ? '/api/source/netease/search?type=song&keywords=' + encodeURIComponent(kw) + '&limit=30'
           : '/api/search?keywords=' + encodeURIComponent(kw);
@@ -686,6 +699,7 @@ export default function App() {
                 coverUrl: (x.coverUrl as string) || null,
                 source: searchSource,
                 sourceLabel: label,
+                inLibrary: !!x.inLibrary,
               },
         );
         setResults(items as unknown as Song[]);
@@ -972,6 +986,7 @@ export default function App() {
   const libPageCount = Math.max(1, Math.ceil(libSongs.length / LIB_PAGE));
   const libPageSongs = useMemo(() => libSongs.slice(libPage * LIB_PAGE, libPage * LIB_PAGE + LIB_PAGE), [libSongs, libPage]);
   const orderArr = useMemo(() => orderText.split(/[\s,，、→>/-]+/).filter(Boolean), [orderText]);
+  const shownResults = useMemo(() => (hideInLib ? results.filter((r) => !r.inLibrary) : results), [results, hideInLib]);
 
   function SongRow({ s, list, onAdd, onDownload, onClip }: { s: LibrarySong | Song; list: Array<LibrarySong | Song>; onAdd?: () => void; onDownload?: () => void; onClip?: () => void }) {
     const isLib = 'type' in s;
@@ -990,6 +1005,9 @@ export default function App() {
           {isLib ? <span className="chip chip-gold">{lib.type}</span> : null}
           {!isLib && (s as { source?: string }).source ? (
             <span className="chip chip-src">{SOURCE_LABELS[(s as { source?: string }).source as string] || (s as { sourceLabel?: string }).sourceLabel || ''}</span>
+          ) : null}
+          {!isLib && (s as { inLibrary?: boolean }).inLibrary ? (
+            <span className="chip chip-green" title="曲库中已有这首">已在曲库</span>
           ) : null}
           {isLib && lib.source && lib.source !== 'qqmusic' ? (
             <span className="chip chip-src" title={'来源：' + (SOURCE_LABELS[lib.source] || lib.source)}>
@@ -1155,19 +1173,43 @@ export default function App() {
                     <Radio value="qqmusic">QQ音乐</Radio>
                     <Radio value="netease">网易云音乐</Radio>
                   </RadioGroup>
-                  <Input value={kw} onChange={setKw} onEnterPress={doSearch} placeholder="歌曲 / 歌手" style={{ width: 250 }} />
+                  {searchSource === 'all' ? (
+                    <Select
+                      multiple
+                      value={searchSources}
+                      onChange={(v) => setSearchSources((v as string[]) || [])}
+                      style={{ width: 180 }}
+                      optionList={srcDefs.map((d) => ({ value: d.id, label: d.label }))}
+                      placeholder="全部来源"
+                    />
+                  ) : null}
+                  <Input value={kw} onChange={setKw} onEnterPress={doSearch} placeholder="歌曲 / 歌手" style={{ width: 230 }} />
                   <Select allowCreate value={addType} onChange={(v) => setAddType(v as string)} style={{ width: 130 }} optionList={typeOptions} placeholder="加入舞种" />
                   <Button theme="solid" type="primary" onClick={doSearch} loading={loadingSearch}>
                     搜索
                   </Button>
+                  {results.length ? (
+                    <Button theme={hideInLib ? 'solid' : 'borderless'} onClick={() => setHideInLib((v) => !v)} title="只显示曲库里还没有的">
+                      隐藏已入库
+                    </Button>
+                  ) : null}
                 </div>
               </div>
               {results.length ? (
-                <div className="songlist">
-                  {results.map((s) => (
-                    <SongRow key={s.mid} s={s} list={results} onAdd={() => addSearchResult(s)} onDownload={() => downloadSearchResult(s)} />
-                  ))}
-                </div>
+                <>
+                  <div className="hint" style={{ marginBottom: 8 }}>
+                    共 {results.length} 首 · 已在曲库 {results.filter((r) => r.inLibrary).length} · 显示 {shownResults.length}
+                  </div>
+                  {shownResults.length ? (
+                    <div className="songlist">
+                      {shownResults.map((s) => (
+                        <SongRow key={(s.source || 'x') + ':' + s.mid} s={s} list={shownResults} onAdd={() => addSearchResult(s)} onDownload={() => downloadSearchResult(s)} />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="empty">曲库里都已经有了（取消「隐藏已入库」可查看）</div>
+                  )}
+                </>
               ) : (
                 <div className="empty">
                   <div className="empty-ico">

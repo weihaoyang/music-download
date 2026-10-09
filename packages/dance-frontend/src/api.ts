@@ -132,6 +132,14 @@ export interface Song {
   album: { name: string } | null;
   durationMs: number;
   coverUrl: string | null;
+  /** 聚合搜索：来源 */
+  source?: string | null;
+  /** 聚合搜索：来源显示名 */
+  sourceLabel?: string | null;
+  /** 是否已在曲库 */
+  inLibrary?: boolean;
+  /** 聚合搜索：同曲还出现在哪些来源 */
+  alsoIn?: string[];
 }
 
 export interface TaskItem {

@@ -881,18 +881,24 @@ export function createServer(cfg: BackendConfig) {
         keyword: url.searchParams.get('keywords') || url.searchParams.get('q') || '',
         limit: Number(url.searchParams.get('limit') || 20),
       });
-      return sendJson(res, 200, { ok: true, ...page });
+      const items = (page.items || []).map((s) => ({ ...s, inLibrary: !!library.findByMid(s.mid) }));
+      return sendJson(res, 200, { ok: true, ...page, items });
     }
     if (p === '/api/search/playlists' && method === 'GET') {
       const client = await pool.anonymous();
       const page = await client.search.playlists({ keyword: url.searchParams.get('keywords') || '', limit: Number(url.searchParams.get('limit') || 20) });
       return sendJson(res, 200, { ok: true, ...page });
     }
-    // 聚合搜索：并行查所有支持搜索的来源，交错合并（每条带 source）
+    // 聚合搜索：并行查所有支持搜索的来源，交错合并（每条带 source）；支持 sources 筛选 + 跨来源去重 + 已在曲库标记
     if (p === '/api/search/aggregate' && method === 'GET') {
       const kw = url.searchParams.get('keywords') || '';
       const limit = Number(url.searchParams.get('limit') || 20);
-      const searchers = [...sources.values()].filter((d) => d.search);
+      const want = (url.searchParams.get('sources') || '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      let searchers = [...sources.values()].filter((d) => d.search);
+      if (want.length) searchers = searchers.filter((d) => want.includes(d.id));
       const settled = await Promise.allSettled(
         searchers.map(async (d) => {
           const items = (await d.search!(kw, 'song', limit)) as Array<Record<string, unknown>>;
@@ -909,10 +915,27 @@ export function createServer(cfg: BackendConfig) {
         }),
       );
       const lists = settled.map((r) => (r.status === 'fulfilled' ? r.value : []));
+      // 交错合并 + 跨来源去重：同名同歌手只保留首个（QQ 优先），其余来源并入 alsoIn
       const merged: Array<Record<string, unknown>> = [];
+      const seen = new Map<string, Record<string, unknown>>();
       const maxLen = lists.reduce((m, l) => Math.max(m, l.length), 0);
-      for (let i = 0; i < maxLen; i++) for (const l of lists) if (l[i]) merged.push(l[i]);
-      return sendJson(res, 200, { ok: true, items: merged });
+      for (let i = 0; i < maxLen; i++) {
+        for (const l of lists) {
+          const it = l[i];
+          if (!it) continue;
+          const key = (String(it.name || '').trim() + '|' + ((it.artists as string[]) || []).join(',')).toLowerCase();
+          const dup = seen.get(key);
+          if (dup) {
+            const arr = dup.alsoIn as string[];
+            if (!arr.includes(String(it.source))) arr.push(String(it.source));
+            continue;
+          }
+          const row: Record<string, unknown> = { ...it, alsoIn: [String(it.source)], inLibrary: !!library.findByMid(String(it.mid)) };
+          seen.set(key, row);
+          merged.push(row);
+        }
+      }
+      return sendJson(res, 200, { ok: true, items: merged, sources: searchers.map((d) => d.id) });
     }
     // 可用下载来源（来源注册表）
     if (p === '/api/sources' && method === 'GET') {
@@ -931,7 +954,9 @@ export function createServer(cfg: BackendConfig) {
         const kw = url.searchParams.get('keywords') || '';
         const kind = url.searchParams.get('type') || 'song';
         const limit = Number(url.searchParams.get('limit') || 20);
-        return sendJson(res, 200, { ok: true, kind, items: await def.search(kw, kind, limit) });
+        const raw = (await def.search(kw, kind, limit)) as Array<Record<string, unknown>>;
+        const items = raw.map((x) => ({ ...x, inLibrary: !!library.findByMid(String(x.mid ?? x.id ?? '')) }));
+        return sendJson(res, 200, { ok: true, kind, items });
       }
     }
     // 来源通用导入：POST /api/source/:id/import  { type, download?, ...来源参数 }

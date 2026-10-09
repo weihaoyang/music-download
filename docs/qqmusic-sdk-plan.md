@@ -828,3 +828,14 @@ D:\music-download\
 - **BPM / 曲风**：`QueueItem` 增加 `bpm` / `mood`（`openPlayer`/`openWall` 从曲库带入），大屏在歌手下方以胶囊展示「115 BPM · 舒缓」。
 - **点歌条增强**：标签显示数量「点歌 N」；已采纳的曲目在滚动文本里带「✓」。
 - **实测**：伦巴曲 → `.wall-tint` = `rgba(197,107,138,0.25)`、`.wall-meta` = 「115 BPM / 舒缓」、点歌条「点歌 1」+「氛围测试曲✓」；`.wall-type` 同步伦巴色；无 console 报错；`smoke-v6` 27/27、`smoke-v7` 14/14。
+
+## 45. 搜索体验：来源筛选 + 跨来源去重 + 「已在曲库」标记（✅ 已完成并实测）
+
+- **后端**：
+  - `/api/search/aggregate` 支持 `sources=qqmusic,netease` 限定来源；结果**跨来源去重**——同名同歌手只保留首个（QQ 优先），其余来源并入 `alsoIn`；每条带 `inLibrary`（是否已在曲库）。
+  - 单来源 `/api/search`（QQ）与 `/api/source/:id/search` 的每条结果也带 `inLibrary`。
+- **前端（搜索页）**：
+  - 聚合模式下新增**来源多选**（`Select multiple`，选项来自 `/api/sources` 的可搜索来源），随 `sources` 传给后端。
+  - 结果区显示汇总「共 N 首 · 已在曲库 M · 显示 K」；每行对已入库曲目显示绿色「**已在曲库**」chip（与来源 chip 并列）。
+  - 新增「**隐藏已入库**」开关，只看曲库里没有的。
+- **实测**：聚合「月亮之上」→ 15 条、首条 QQ 命中且 `inLibrary=true`、`alsoIn=["qqmusic","netease"]`（**跨来源已合并去重**）；`sources=qqmusic` → 仅 QQ、8 条；UI 汇总「共 29 首 · 已在曲库 1 · 显示 29」、绿色 chip ×1、来源多选存在；点「隐藏已入库」→「显示 28」且 chip 消失；无 console 报错；`smoke-v6` 27/27、`smoke-v7` 14/14。
